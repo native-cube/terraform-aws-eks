@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT_DIR"
+
+echo "Checking Terraform formatting..."
+terraform fmt -check -recursive
+
+echo "Checking generated Terraform documentation..."
+scripts/terraform-docs.sh --check
+
+echo "Terraform pre-commit checks passed."
