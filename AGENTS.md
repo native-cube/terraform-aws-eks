@@ -53,6 +53,12 @@ terraform validate
 terraform test
 ```
 
+You can also run the local aggregate target:
+
+```bash
+make check
+```
+
 For example changes, also run the same init and validate commands from the touched example directory.
 
 Do not run `terraform apply`, `terraform destroy`, or destructive state commands unless the user explicitly asks for them and confirms the target environment.

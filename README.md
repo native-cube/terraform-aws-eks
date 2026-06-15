@@ -142,6 +142,16 @@ terraform test
 
 Pull requests run the same tests through `.github/workflows/terraform-pr.yml`, along with formatting, generated-docs, validation, and example checks.
 
+## Local Development
+
+Use the Makefile for common local checks:
+
+```bash
+make fmt
+make docs
+make check
+```
+
 ## Notes
 
 - The module does not create VPC, subnet, route table, NAT gateway, or security baseline resources.
