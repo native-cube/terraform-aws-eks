@@ -35,6 +35,12 @@ variable "subnet_ids" {
   }
 }
 
+variable "cluster_security_group_ids" {
+  description = "Additional security group IDs to associate with the EKS control plane."
+  type        = list(string)
+  default     = []
+}
+
 variable "endpoint_private_access" {
   description = "Whether the Kubernetes API server endpoint is reachable from within the VPC."
   type        = bool
@@ -51,6 +57,50 @@ variable "public_access_cidrs" {
   description = "CIDR blocks that can access the public Kubernetes API endpoint."
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "access_config" {
+  description = "Optional EKS access configuration for cluster authentication mode and creator admin permissions."
+  type = object({
+    authentication_mode                         = optional(string)
+    bootstrap_cluster_creator_admin_permissions = optional(bool)
+  })
+  default = null
+
+  validation {
+    condition = (
+      var.access_config == null ||
+      var.access_config.authentication_mode == null ||
+      contains(["API", "API_AND_CONFIG_MAP", "CONFIG_MAP"], var.access_config.authentication_mode)
+    )
+    error_message = "access_config.authentication_mode must be API, API_AND_CONFIG_MAP, or CONFIG_MAP."
+  }
+}
+
+variable "deletion_protection" {
+  description = "Whether to enable deletion protection for the EKS cluster. Leave null to use the AWS/provider default."
+  type        = bool
+  default     = null
+}
+
+variable "cluster_encryption_config" {
+  description = "Optional EKS encryption configuration for Kubernetes secrets using an existing KMS key."
+  type = object({
+    provider_key_arn = string
+    resources        = optional(list(string), ["secrets"])
+  })
+  default = null
+
+  validation {
+    condition = (
+      var.cluster_encryption_config == null ||
+      alltrue([
+        for resource in var.cluster_encryption_config.resources :
+        resource == "secrets"
+      ])
+    )
+    error_message = "cluster_encryption_config.resources currently supports only secrets."
+  }
 }
 
 variable "enabled_cluster_log_types" {
@@ -81,6 +131,12 @@ variable "cloudwatch_log_retention_days" {
   }
 }
 
+variable "cloudwatch_log_group_kms_key_id" {
+  description = "Optional KMS key ID or ARN for encrypting the EKS control plane CloudWatch log group."
+  type        = string
+  default     = null
+}
+
 variable "service_ipv4_cidr" {
   description = "Optional Kubernetes service IPv4 CIDR. Set only when you need a non-default service CIDR."
   type        = string
@@ -100,6 +156,19 @@ variable "node_groups" {
     min_size               = optional(number, 1)
     subnet_ids             = optional(list(string), [])
     update_max_unavailable = optional(number, 1)
+    node_repair_config = optional(object({
+      enabled                                 = optional(bool)
+      max_parallel_nodes_repaired_count       = optional(number)
+      max_parallel_nodes_repaired_percentage  = optional(number)
+      max_unhealthy_node_threshold_count      = optional(number)
+      max_unhealthy_node_threshold_percentage = optional(number)
+      overrides = optional(list(object({
+        min_repair_wait_time_mins = number
+        node_monitoring_condition = string
+        node_unhealthy_reason     = string
+        repair_action             = string
+      })), [])
+    }))
     taints = optional(list(object({
       effect = string
       key    = string
@@ -148,7 +217,11 @@ variable "node_groups" {
 variable "addons" {
   description = "EKS add-ons to install after the managed node groups are created."
   type = map(object({
-    configuration_values        = optional(string)
+    configuration_values = optional(string)
+    pod_identity_associations = optional(list(object({
+      role_arn        = string
+      service_account = string
+    })), [])
     resolve_conflicts_on_create = optional(string, "OVERWRITE")
     resolve_conflicts_on_update = optional(string, "OVERWRITE")
     service_account_role_arn    = optional(string)

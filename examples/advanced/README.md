@@ -5,8 +5,12 @@ More complete example for teams that want to tune the cluster while still supply
 This example shows:
 
 - Restricted public Kubernetes API access.
+- Optional additional EKS control plane security groups.
+- Access entry authentication mode configuration and deletion protection.
+- Optional KMS encryption for Kubernetes secrets and control-plane logs.
 - Full control-plane logging with configurable retention.
 - Separate on-demand and spot managed node groups.
+- Managed node group node repair configuration.
 - Optional node-group subnet overrides.
 - Separate module resource prefix and EKS cluster name through `name` and `cluster_name`.
 - VPC CNI prefix delegation configuration.

@@ -1,7 +1,8 @@
 resource "aws_eks_cluster" "this" {
-  name     = local.cluster_name
-  role_arn = aws_iam_role.cluster.arn
-  version  = var.kubernetes_version
+  name                = local.cluster_name
+  role_arn            = aws_iam_role.cluster.arn
+  version             = var.kubernetes_version
+  deletion_protection = var.deletion_protection
 
   enabled_cluster_log_types = var.enabled_cluster_log_types
 
@@ -10,6 +11,28 @@ resource "aws_eks_cluster" "this" {
     endpoint_private_access = var.endpoint_private_access
     endpoint_public_access  = var.endpoint_public_access
     public_access_cidrs     = var.public_access_cidrs
+    security_group_ids      = var.cluster_security_group_ids
+  }
+
+  dynamic "access_config" {
+    for_each = var.access_config == null ? [] : [var.access_config]
+
+    content {
+      authentication_mode                         = access_config.value.authentication_mode
+      bootstrap_cluster_creator_admin_permissions = access_config.value.bootstrap_cluster_creator_admin_permissions
+    }
+  }
+
+  dynamic "encryption_config" {
+    for_each = var.cluster_encryption_config == null ? [] : [var.cluster_encryption_config]
+
+    content {
+      resources = encryption_config.value.resources
+
+      provider {
+        key_arn = encryption_config.value.provider_key_arn
+      }
+    }
   }
 
   dynamic "kubernetes_network_config" {
@@ -53,6 +76,29 @@ resource "aws_eks_node_group" "this" {
     max_unavailable = each.value.update_max_unavailable
   }
 
+  dynamic "node_repair_config" {
+    for_each = each.value.node_repair_config == null ? [] : [each.value.node_repair_config]
+
+    content {
+      enabled                                 = node_repair_config.value.enabled
+      max_parallel_nodes_repaired_count       = node_repair_config.value.max_parallel_nodes_repaired_count
+      max_parallel_nodes_repaired_percentage  = node_repair_config.value.max_parallel_nodes_repaired_percentage
+      max_unhealthy_node_threshold_count      = node_repair_config.value.max_unhealthy_node_threshold_count
+      max_unhealthy_node_threshold_percentage = node_repair_config.value.max_unhealthy_node_threshold_percentage
+
+      dynamic "node_repair_config_overrides" {
+        for_each = node_repair_config.value.overrides
+
+        content {
+          min_repair_wait_time_mins = node_repair_config_overrides.value.min_repair_wait_time_mins
+          node_monitoring_condition = node_repair_config_overrides.value.node_monitoring_condition
+          node_unhealthy_reason     = node_repair_config_overrides.value.node_unhealthy_reason
+          repair_action             = node_repair_config_overrides.value.repair_action
+        }
+      }
+    }
+  }
+
   dynamic "taint" {
     for_each = each.value.taints
 
@@ -86,6 +132,15 @@ resource "aws_eks_addon" "this" {
   resolve_conflicts_on_update = each.value.resolve_conflicts_on_update
   service_account_role_arn    = each.value.service_account_role_arn
   tags                        = local.common_tags
+
+  dynamic "pod_identity_association" {
+    for_each = each.value.pod_identity_associations
+
+    content {
+      role_arn        = pod_identity_association.value.role_arn
+      service_account = pod_identity_association.value.service_account
+    }
+  }
 
   depends_on = [
     aws_eks_node_group.this
