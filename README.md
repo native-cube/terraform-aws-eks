@@ -16,8 +16,9 @@ The module expects you to provide existing subnet IDs. In most deployments these
 module "eks" {
   source = "./eks"
 
-  name       = "dev-eks"
-  subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
+  name         = "dev"
+  cluster_name = "dev-eks"
+  subnet_ids   = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
 
   node_groups = {
     default = {
@@ -81,11 +82,12 @@ aws eks update-kubeconfig --name dev-eks
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_addons"></a> [addons](#input\_addons) | EKS add-ons to install after the managed node groups are created. | <pre>map(object({<br/>    configuration_values        = optional(string)<br/>    resolve_conflicts_on_create = optional(string, "OVERWRITE")<br/>    resolve_conflicts_on_update = optional(string, "OVERWRITE")<br/>    service_account_role_arn    = optional(string)<br/>    version                     = optional(string)<br/>  }))</pre> | <pre>{<br/>  "coredns": {},<br/>  "kube-proxy": {},<br/>  "vpc-cni": {}<br/>}</pre> | no |
 | <a name="input_cloudwatch_log_retention_days"></a> [cloudwatch\_log\_retention\_days](#input\_cloudwatch\_log\_retention\_days) | Retention in days for the EKS control plane CloudWatch log group. | `number` | `30` | no |
+| <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Optional EKS cluster name. When null, name is used as the cluster name. | `string` | `null` | no |
 | <a name="input_enabled_cluster_log_types"></a> [enabled\_cluster\_log\_types](#input\_enabled\_cluster\_log\_types) | EKS control plane log types to enable. | `list(string)` | <pre>[<br/>  "api",<br/>  "audit",<br/>  "authenticator"<br/>]</pre> | no |
 | <a name="input_endpoint_private_access"></a> [endpoint\_private\_access](#input\_endpoint\_private\_access) | Whether the Kubernetes API server endpoint is reachable from within the VPC. | `bool` | `true` | no |
 | <a name="input_endpoint_public_access"></a> [endpoint\_public\_access](#input\_endpoint\_public\_access) | Whether the Kubernetes API server endpoint is reachable from the public internet. | `bool` | `true` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version for the EKS cluster and managed node groups. Leave null to use the current AWS default. | `string` | `null` | no |
-| <a name="input_name"></a> [name](#input\_name) | Name of the EKS cluster. | `string` | n/a | yes |
+| <a name="input_name"></a> [name](#input\_name) | Name prefix for module-created resources. Used as the EKS cluster name when cluster\_name is null. | `string` | n/a | yes |
 | <a name="input_node_groups"></a> [node\_groups](#input\_node\_groups) | Managed node groups to create. | <pre>map(object({<br/>    ami_type               = optional(string)<br/>    capacity_type          = optional(string, "ON_DEMAND")<br/>    desired_size           = optional(number, 2)<br/>    disk_size              = optional(number, 20)<br/>    instance_types         = optional(list(string), ["t3.medium"])<br/>    labels                 = optional(map(string), {})<br/>    max_size               = optional(number, 3)<br/>    min_size               = optional(number, 1)<br/>    subnet_ids             = optional(list(string), [])<br/>    update_max_unavailable = optional(number, 1)<br/>    taints = optional(list(object({<br/>      effect = string<br/>      key    = string<br/>      value  = optional(string, "")<br/>    })), [])<br/>  }))</pre> | <pre>{<br/>  "default": {}<br/>}</pre> | no |
 | <a name="input_public_access_cidrs"></a> [public\_access\_cidrs](#input\_public\_access\_cidrs) | CIDR blocks that can access the public Kubernetes API endpoint. | `list(string)` | <pre>[<br/>  "0.0.0.0/0"<br/>]</pre> | no |
 | <a name="input_service_ipv4_cidr"></a> [service\_ipv4\_cidr](#input\_service\_ipv4\_cidr) | Optional Kubernetes service IPv4 CIDR. Set only when you need a non-default service CIDR. | `string` | `null` | no |

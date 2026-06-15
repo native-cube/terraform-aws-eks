@@ -25,7 +25,8 @@ run "custom_cluster_shape" {
   command = plan
 
   variables {
-    name               = "unit-custom"
+    name               = "unit-custom-prefix"
+    cluster_name       = "unit-custom"
     kubernetes_version = "1.30"
     subnet_ids = [
       "subnet-0123456789abcdef0",
@@ -98,6 +99,21 @@ run "custom_cluster_shape" {
       Environment = "test"
       Owner       = "platform"
     }
+  }
+
+  assert {
+    condition     = aws_eks_cluster.this.name == "unit-custom"
+    error_message = "The EKS cluster should use cluster_name when it is set."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_log_group.cluster[0].name == "/aws/eks/unit-custom/cluster"
+    error_message = "The control plane log group should use the actual EKS cluster name."
+  }
+
+  assert {
+    condition     = aws_eks_node_group.this["spot"].node_group_name == "unit-custom-prefix-spot"
+    error_message = "Managed node group names should continue to use name as the resource prefix."
   }
 
   assert {

@@ -1,5 +1,5 @@
 resource "aws_eks_cluster" "this" {
-  name     = var.name
+  name     = local.cluster_name
   role_arn = aws_iam_role.cluster.arn
   version  = var.kubernetes_version
 

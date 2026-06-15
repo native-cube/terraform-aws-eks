@@ -13,3 +13,5 @@ Provide existing subnet IDs before planning or applying:
 terraform init
 terraform plan -var='subnet_ids=["subnet-0123456789abcdef0","subnet-0fedcba9876543210"]'
 ```
+
+Set `cluster_name` when the EKS cluster name should differ from the module resource prefix in `name`.

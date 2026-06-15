@@ -1,9 +1,11 @@
 locals {
+  cluster_name = coalesce(var.cluster_name, var.name)
+
   common_tags = merge(
     var.tags,
     {
       "terraform-module" = "eks"
-      "eks-cluster"      = var.name
+      "eks-cluster"      = local.cluster_name
     }
   )
 
