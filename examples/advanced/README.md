@@ -8,6 +8,7 @@ This example shows:
 - Full control-plane logging with configurable retention.
 - Separate on-demand and spot managed node groups.
 - Optional node-group subnet overrides.
+- Separate module resource prefix and EKS cluster name through `name` and `cluster_name`.
 - VPC CNI prefix delegation configuration.
 - Additional EKS add-ons for identity, storage snapshots, node health, metrics, certificates, Prometheus exporters, and log forwarding.
 - Optional IAM-backed add-ons for EBS CSI, EFS CSI, CloudWatch Observability, and ExternalDNS when their service-account role ARNs are supplied.

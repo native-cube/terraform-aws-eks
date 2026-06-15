@@ -5,9 +5,15 @@ variable "region" {
 }
 
 variable "name" {
-  description = "Name of the EKS cluster."
+  description = "Name prefix for module-created resources."
   type        = string
-  default     = "minimal-eks"
+  default     = "minimal"
+}
+
+variable "cluster_name" {
+  description = "Optional EKS cluster name. When null, name is used as the cluster name."
+  type        = string
+  default     = null
 }
 
 variable "subnet_ids" {

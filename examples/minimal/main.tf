@@ -16,8 +16,9 @@ provider "aws" {
 module "eks" {
   source = "../.."
 
-  name       = var.name
-  subnet_ids = var.subnet_ids
+  name         = var.name
+  cluster_name = var.cluster_name
+  subnet_ids   = var.subnet_ids
 
   tags = var.tags
 }

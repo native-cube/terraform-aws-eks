@@ -17,6 +17,7 @@ module "eks" {
   source = "../.."
 
   name               = var.name
+  cluster_name       = var.cluster_name
   kubernetes_version = var.kubernetes_version
   subnet_ids         = var.control_plane_subnet_ids
 

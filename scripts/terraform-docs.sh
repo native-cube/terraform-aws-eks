@@ -17,7 +17,7 @@ if ! command -v terraform-docs >/dev/null 2>&1; then
 fi
 
 if [[ "$CHECK_MODE" == true ]]; then
-  terraform-docs markdown table --config "$ROOT_DIR/.terraform-docs.yml" --output-check "$ROOT_DIR"
+  terraform-docs --lockfile=false markdown table --config "$ROOT_DIR/.terraform-docs.yml" --output-check "$ROOT_DIR"
 else
-  terraform-docs markdown table --config "$ROOT_DIR/.terraform-docs.yml" "$ROOT_DIR"
+  terraform-docs --lockfile=false markdown table --config "$ROOT_DIR/.terraform-docs.yml" "$ROOT_DIR"
 fi

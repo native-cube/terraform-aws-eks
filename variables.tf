@@ -1,10 +1,21 @@
 variable "name" {
-  description = "Name of the EKS cluster."
+  description = "Name prefix for module-created resources. Used as the EKS cluster name when cluster_name is null."
   type        = string
 
   validation {
     condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9-_]{0,99}$", var.name))
-    error_message = "The cluster name must start with a letter or number and contain only letters, numbers, hyphens, and underscores."
+    error_message = "The name must start with a letter or number and contain only letters, numbers, hyphens, and underscores."
+  }
+}
+
+variable "cluster_name" {
+  description = "Optional EKS cluster name. When null, name is used as the cluster name."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cluster_name == null || can(regex("^[A-Za-z0-9][A-Za-z0-9-_]{0,99}$", var.cluster_name))
+    error_message = "The cluster_name must start with a letter or number and contain only letters, numbers, hyphens, and underscores."
   }
 }
 
