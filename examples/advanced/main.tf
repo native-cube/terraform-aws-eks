@@ -21,13 +21,19 @@ module "eks" {
   kubernetes_version = var.kubernetes_version
   subnet_ids         = var.control_plane_subnet_ids
 
-  endpoint_private_access = true
-  endpoint_public_access  = var.endpoint_public_access
-  public_access_cidrs     = var.public_access_cidrs
+  cluster_security_group_ids = var.cluster_security_group_ids
+  endpoint_private_access    = true
+  endpoint_public_access     = var.endpoint_public_access
+  public_access_cidrs        = var.public_access_cidrs
 
-  enabled_cluster_log_types     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
-  cloudwatch_log_retention_days = var.cloudwatch_log_retention_days
-  service_ipv4_cidr             = var.service_ipv4_cidr
+  access_config             = var.access_config
+  deletion_protection       = var.deletion_protection
+  cluster_encryption_config = var.cluster_encryption_config
+
+  enabled_cluster_log_types       = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  cloudwatch_log_retention_days   = var.cloudwatch_log_retention_days
+  cloudwatch_log_group_kms_key_id = var.cloudwatch_log_group_kms_key_id
+  service_ipv4_cidr               = var.service_ipv4_cidr
 
   node_groups = {
     system = {
@@ -38,6 +44,7 @@ module "eks" {
       labels                 = { workload = "system" }
       max_size               = 4
       min_size               = 2
+      node_repair_config     = var.node_repair_config
       subnet_ids             = local.node_group_subnet_ids
       update_max_unavailable = 1
     }
@@ -57,6 +64,7 @@ module "eks" {
       }
       max_size               = 6
       min_size               = 0
+      node_repair_config     = var.node_repair_config
       subnet_ids             = local.node_group_subnet_ids
       update_max_unavailable = 1
       taints = [
