@@ -15,7 +15,7 @@ resource "aws_eks_cluster" "this" {
   }
 
   dynamic "access_config" {
-    for_each = var.access_config == null ? [] : [var.access_config]
+    for_each = local.cluster_access_config == null ? [] : [local.cluster_access_config]
 
     content {
       authentication_mode                         = access_config.value.authentication_mode
@@ -49,6 +49,38 @@ resource "aws_eks_cluster" "this" {
     aws_cloudwatch_log_group.cluster,
     aws_iam_role_policy_attachment.cluster
   ]
+}
+
+resource "aws_ec2_tag" "karpenter_cluster_security_group" {
+  count = local.karpenter_enabled && var.karpenter.tag_cluster_security_group ? 1 : 0
+
+  resource_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  key         = local.karpenter_discovery_tag_key
+  value       = local.karpenter_discovery_tag_value
+}
+
+resource "aws_ec2_tag" "karpenter_subnets" {
+  for_each = local.karpenter_enabled && var.karpenter.tag_subnets ? toset(local.karpenter_subnet_ids) : toset([])
+
+  resource_id = each.value
+  key         = local.karpenter_discovery_tag_key
+  value       = local.karpenter_discovery_tag_value
+}
+
+resource "aws_eks_access_entry" "karpenter_node" {
+  count = local.karpenter_create_access_entry ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = local.karpenter_node_role_arn
+  type          = "EC2_LINUX"
+  tags          = local.common_tags
+
+  lifecycle {
+    precondition {
+      condition     = contains(["API", "API_AND_CONFIG_MAP"], local.cluster_access_config.authentication_mode)
+      error_message = "Karpenter access entries require access_config.authentication_mode to be API or API_AND_CONFIG_MAP."
+    }
+  }
 }
 
 resource "aws_eks_node_group" "this" {
