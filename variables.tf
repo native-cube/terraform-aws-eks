@@ -234,6 +234,38 @@ variable "addons" {
   }
 }
 
+variable "karpenter" {
+  description = "Optional EKS-side readiness settings for Karpenter. This module prepares AWS/EKS primitives only; install Karpenter, controller IAM, interruption handling, NodePools, and EC2NodeClasses separately."
+  type = object({
+    create_access_entry        = optional(bool, true)
+    create_node_iam_role       = optional(bool, true)
+    enabled                    = optional(bool, false)
+    node_iam_role_arn          = optional(string)
+    node_iam_role_name         = optional(string)
+    subnet_ids                 = optional(list(string), [])
+    tag_cluster_security_group = optional(bool, true)
+    tag_subnets                = optional(bool, true)
+  })
+  default = {}
+
+  validation {
+    condition = (
+      !var.karpenter.enabled ||
+      var.karpenter.create_node_iam_role ||
+      var.karpenter.node_iam_role_arn != null
+    )
+    error_message = "When karpenter.enabled is true and create_node_iam_role is false, karpenter.node_iam_role_arn must be set."
+  }
+
+  validation {
+    condition = (
+      var.karpenter.node_iam_role_name == null ||
+      can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.karpenter.node_iam_role_name))
+    )
+    error_message = "karpenter.node_iam_role_name must be 1-64 characters and contain only IAM role name characters."
+  }
+}
+
 variable "tags" {
   description = "Tags to apply to created resources."
   type        = map(string)

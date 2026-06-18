@@ -24,6 +24,11 @@ output "cluster_security_group_id" {
   value       = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
 }
 
+output "cluster_oidc_issuer_url" {
+  description = "OIDC issuer URL for the EKS cluster."
+  value       = aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
+
 output "cluster_log_group_name" {
   description = "CloudWatch log group for EKS control plane logs, if cluster logs are enabled."
   value       = try(aws_cloudwatch_log_group.cluster[0].name, null)
@@ -37,6 +42,26 @@ output "cluster_iam_role_arn" {
 output "node_iam_role_arn" {
   description = "IAM role ARN used by managed node groups."
   value       = aws_iam_role.node.arn
+}
+
+output "karpenter_discovery_tag_key" {
+  description = "Tag key used by Karpenter discovery selectors when Karpenter readiness is enabled."
+  value       = local.karpenter_enabled ? local.karpenter_discovery_tag_key : null
+}
+
+output "karpenter_discovery_tag_value" {
+  description = "Tag value used by Karpenter discovery selectors when Karpenter readiness is enabled."
+  value       = local.karpenter_enabled ? local.karpenter_discovery_tag_value : null
+}
+
+output "karpenter_node_iam_role_arn" {
+  description = "IAM role ARN for Karpenter-launched worker nodes when Karpenter readiness is enabled."
+  value       = local.karpenter_enabled ? local.karpenter_node_role_arn : null
+}
+
+output "karpenter_node_iam_role_name" {
+  description = "IAM role name for Karpenter EC2NodeClass role configuration when Karpenter readiness is enabled."
+  value       = local.karpenter_enabled ? local.karpenter_node_role_name_out : null
 }
 
 output "node_group_arns" {

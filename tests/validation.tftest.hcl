@@ -98,3 +98,48 @@ run "rejects_unsupported_cluster_encryption_resource" {
     var.cluster_encryption_config
   ]
 }
+
+run "rejects_karpenter_external_role_without_arn" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-karpenter-role"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    karpenter = {
+      enabled              = true
+      create_node_iam_role = false
+    }
+  }
+
+  expect_failures = [
+    var.karpenter
+  ]
+}
+
+run "rejects_karpenter_access_entry_with_config_map_authentication" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-karpenter-auth"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    access_config = {
+      authentication_mode = "CONFIG_MAP"
+    }
+
+    karpenter = {
+      enabled = true
+    }
+  }
+
+  expect_failures = [
+    aws_eks_access_entry.karpenter_node
+  ]
+}
