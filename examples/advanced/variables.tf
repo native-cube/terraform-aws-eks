@@ -58,7 +58,7 @@ variable "access_config" {
     bootstrap_cluster_creator_admin_permissions = optional(bool)
   })
   default = {
-    authentication_mode                         = "API_AND_CONFIG_MAP"
+    authentication_mode                         = "API"
     bootstrap_cluster_creator_admin_permissions = true
   }
 }

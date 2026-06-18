@@ -27,7 +27,7 @@ locals {
   karpenter_create_access_entry  = local.karpenter_enabled && var.karpenter.create_access_entry
 
   cluster_access_config = local.karpenter_create_access_entry ? {
-    authentication_mode                         = coalesce(try(var.access_config.authentication_mode, null), "API_AND_CONFIG_MAP")
+    authentication_mode                         = coalesce(try(var.access_config.authentication_mode, null), "API")
     bootstrap_cluster_creator_admin_permissions = try(var.access_config.bootstrap_cluster_creator_admin_permissions, null)
   } : var.access_config
 

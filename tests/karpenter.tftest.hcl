@@ -69,8 +69,8 @@ run "karpenter_ready_cluster_shape" {
   }
 
   assert {
-    condition     = aws_eks_cluster.this.access_config[0].authentication_mode == "API_AND_CONFIG_MAP"
-    error_message = "Karpenter access entries should derive API_AND_CONFIG_MAP authentication when access_config is omitted."
+    condition     = aws_eks_cluster.this.access_config[0].authentication_mode == "API"
+    error_message = "Karpenter access entries should derive API authentication when access_config is omitted."
   }
 
   assert {
