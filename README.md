@@ -48,7 +48,7 @@ aws eks update-kubeconfig --name dev-eks
 - `examples/minimal` - smallest practical module call using defaults for node groups, add-ons, API access, and logging.
 - `examples/basic` - simple explicit managed node group configuration.
 - `examples/advanced` - restricted API access, full control-plane logging, multiple node groups, expanded add-on configuration, optional IAM-backed add-ons, and optional node subnet overrides.
-- `examples/argocd-capability` - Amazon EKS managed Argo CD capability with IAM Identity Center authentication, optional RBAC group mapping, optional private endpoint access, and optional capability role policies.
+- `examples/capabilities` - Amazon EKS managed capabilities for Argo CD, ACK, and KRO, including IAM Identity Center authentication for Argo CD and optional capability role policies.
 - `examples/karpenter-ready` - EKS-side Karpenter readiness with discovery tags, a Karpenter node role, and node access entry while leaving the Karpenter controller, Helm release, interruption queue, NodePool, and EC2NodeClass to a separate module.
 
 ## EKS Capabilities

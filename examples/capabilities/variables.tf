@@ -7,7 +7,7 @@ variable "region" {
 variable "name" {
   description = "Name prefix for module-created resources."
   type        = string
-  default     = "example-argocd"
+  default     = "example-capabilities"
 }
 
 variable "cluster_name" {
@@ -66,6 +66,36 @@ variable "argocd_capability_iam_policy_arns" {
   description = "Optional managed IAM policy ARNs to attach to the Argo CD capability role for integrations such as Secrets Manager, CodeConnections, or ECR."
   type        = set(string)
   default     = []
+}
+
+variable "argocd_capability_inline_policy_json" {
+  description = "Optional inline IAM policy JSON for the Argo CD capability role."
+  type        = string
+  default     = null
+}
+
+variable "ack_capability_iam_policy_arns" {
+  description = "Optional managed IAM policy ARNs to attach to the ACK capability role for the AWS resources ACK controllers should manage."
+  type        = set(string)
+  default     = []
+}
+
+variable "ack_capability_inline_policy_json" {
+  description = "Optional inline IAM policy JSON for the ACK capability role."
+  type        = string
+  default     = null
+}
+
+variable "kro_capability_iam_policy_arns" {
+  description = "Optional managed IAM policy ARNs to attach to the KRO capability role for the AWS resources KRO should orchestrate."
+  type        = set(string)
+  default     = []
+}
+
+variable "kro_capability_inline_policy_json" {
+  description = "Optional inline IAM policy JSON for the KRO capability role."
+  type        = string
+  default     = null
 }
 
 variable "tags" {

@@ -1,6 +1,10 @@
-# Argo CD Capability Example
+# EKS Capabilities Example
 
-This example creates an EKS cluster and enables the Amazon EKS managed Argo CD capability.
+This example creates an EKS cluster and enables all Amazon EKS managed capability types currently supported by the module:
+
+- `ARGOCD` for managed Argo CD.
+- `ACK` for AWS Controllers for Kubernetes.
+- `KRO` for Kube Resource Orchestrator.
 
 It requires:
 
@@ -8,13 +12,13 @@ It requires:
 - An IAM Identity Center instance ARN for Argo CD authentication.
 - Optionally, an IAM Identity Center group ID to map to the Argo CD `ADMIN` role.
 - Optionally, VPC endpoint IDs to make the managed Argo CD server private-only.
-- Optionally, managed IAM policies for the capability role when Argo CD needs access to services such as Secrets Manager, CodeConnections, or ECR.
+- Optional managed or inline IAM policies per capability role. The exact policies depend on what Argo CD, ACK, or KRO should access or manage.
 
 ```hcl
 module "eks" {
   source = "../.."
 
-  name       = "example-argocd"
+  name       = "example-capabilities"
   subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
 
   capabilities = {
@@ -36,8 +40,16 @@ module "eks" {
         ]
       }
     }
+
+    ack = {
+      type = "ACK"
+    }
+
+    kro = {
+      type = "KRO"
+    }
   }
 }
 ```
 
-After apply, use the `argocd_server_url` output to open the managed Argo CD UI.
+After apply, use `capability_arns` to inspect the created capabilities and `argocd_server_url` to open the managed Argo CD UI.

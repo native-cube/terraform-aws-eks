@@ -54,8 +54,9 @@ module "eks" {
       type            = "ARGOCD"
       capability_name = "argocd"
 
-      create_iam_role = true
-      iam_policy_arns = var.argocd_capability_iam_policy_arns
+      create_iam_role    = true
+      iam_policy_arns    = var.argocd_capability_iam_policy_arns
+      inline_policy_json = var.argocd_capability_inline_policy_json
 
       argocd = {
         namespace               = "argocd"
@@ -65,12 +66,30 @@ module "eks" {
         rbac_role_mappings      = local.argocd_rbac_role_mappings
       }
     }
+
+    ack = {
+      type            = "ACK"
+      capability_name = "ack"
+
+      create_iam_role    = true
+      iam_policy_arns    = var.ack_capability_iam_policy_arns
+      inline_policy_json = var.ack_capability_inline_policy_json
+    }
+
+    kro = {
+      type            = "KRO"
+      capability_name = "kro"
+
+      create_iam_role    = true
+      iam_policy_arns    = var.kro_capability_iam_policy_arns
+      inline_policy_json = var.kro_capability_inline_policy_json
+    }
   }
 
   tags = merge(
     var.tags,
     {
-      Example = "argocd-capability"
+      Example = "capabilities"
     }
   )
 }
