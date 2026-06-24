@@ -83,6 +83,69 @@ resource "aws_eks_access_entry" "karpenter_node" {
   }
 }
 
+resource "aws_eks_capability" "this" {
+  for_each = local.eks_capability_configs
+
+  capability_name           = each.value.capability_name
+  cluster_name              = aws_eks_cluster.this.name
+  delete_propagation_policy = each.value.delete_propagation_policy
+  role_arn                  = local.eks_capability_iam_role_arns[each.key]
+  tags                      = local.common_tags
+  type                      = each.value.type
+
+  dynamic "configuration" {
+    for_each = each.value.type == "ARGOCD" && each.value.argocd != null ? [each.value.argocd] : []
+
+    content {
+      argo_cd {
+        namespace = configuration.value.namespace
+
+        aws_idc {
+          idc_instance_arn = configuration.value.idc_instance_arn
+          idc_region       = configuration.value.idc_region
+        }
+
+        dynamic "network_access" {
+          for_each = length(configuration.value.network_access_vpce_ids) > 0 ? [configuration.value.network_access_vpce_ids] : []
+
+          content {
+            vpce_ids = network_access.value
+          }
+        }
+
+        dynamic "rbac_role_mapping" {
+          for_each = configuration.value.rbac_role_mappings
+
+          content {
+            role = rbac_role_mapping.value.role
+
+            dynamic "identity" {
+              for_each = rbac_role_mapping.value.identities
+
+              content {
+                id   = identity.value.id
+                type = identity.value.type
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = contains(["API", "API_AND_CONFIG_MAP"], local.cluster_access_config.authentication_mode)
+      error_message = "EKS capabilities require access_config.authentication_mode to be API or API_AND_CONFIG_MAP."
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.eks_capability,
+    aws_iam_role_policy_attachment.eks_capability
+  ]
+}
+
 resource "aws_eks_node_group" "this" {
   for_each = var.node_groups
 

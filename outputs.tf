@@ -44,6 +44,47 @@ output "node_iam_role_arn" {
   value       = aws_iam_role.node.arn
 }
 
+output "capability_arns" {
+  description = "Amazon EKS capability ARNs by capability key."
+  value       = { for key, capability in aws_eks_capability.this : key => capability.arn }
+}
+
+output "capability_names" {
+  description = "Amazon EKS capability names by capability key."
+  value       = { for key, capability in aws_eks_capability.this : key => capability.capability_name }
+}
+
+output "capability_versions" {
+  description = "Amazon EKS capability software versions by capability key."
+  value       = { for key, capability in aws_eks_capability.this : key => capability.version }
+}
+
+output "capability_iam_role_arns" {
+  description = "IAM role ARNs used by Amazon EKS capabilities by capability key."
+  value       = local.eks_capability_iam_role_arns
+}
+
+output "capability_iam_role_names" {
+  description = "IAM role names used by Amazon EKS capabilities by capability key."
+  value       = local.eks_capability_iam_role_names
+}
+
+output "argocd_server_urls" {
+  description = "Managed Argo CD server URLs by ARGOCD capability key."
+  value = {
+    for key, capability in aws_eks_capability.this : key => try(capability.configuration[0].argo_cd[0].server_url, null)
+    if local.eks_capability_configs[key].type == "ARGOCD"
+  }
+}
+
+output "argocd_idc_managed_application_arns" {
+  description = "IAM Identity Center managed application ARNs by ARGOCD capability key."
+  value = {
+    for key, capability in aws_eks_capability.this : key => try(capability.configuration[0].argo_cd[0].aws_idc[0].idc_managed_application_arn, null)
+    if local.eks_capability_configs[key].type == "ARGOCD"
+  }
+}
+
 output "karpenter_discovery_tag_key" {
   description = "Tag key used by Karpenter discovery selectors when Karpenter readiness is enabled."
   value       = local.karpenter_enabled ? local.karpenter_discovery_tag_key : null

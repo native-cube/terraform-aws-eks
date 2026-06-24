@@ -143,3 +143,218 @@ run "rejects_karpenter_access_entry_with_config_map_authentication" {
     aws_eks_access_entry.karpenter_node
   ]
 }
+
+run "rejects_invalid_capability_type" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-capability-type"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      invalid = {
+        type = "FLUXCD"
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_capability_external_role_without_arn" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-capability-role"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      ack = {
+        type            = "ACK"
+        create_iam_role = false
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_capability_unsupported_delete_policy" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-capability-delete-policy"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      ack = {
+        type                      = "ACK"
+        delete_propagation_policy = "DELETE"
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_argocd_capability_without_identity_center_instance" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-idc"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      argocd = {
+        type   = "ARGOCD"
+        argocd = {}
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_argocd_config_for_non_argocd_capability" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-non-argocd-config"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      ack = {
+        type = "ACK"
+        argocd = {
+          idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+        }
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_argocd_capability_invalid_rbac_role" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-rbac-role"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      argocd = {
+        type = "ARGOCD"
+        argocd = {
+          idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+          rbac_role_mappings = [
+            {
+              role = "OWNER"
+              identities = [
+                {
+                  id   = "12345678-1234-1234-1234-123456789012"
+                  type = "SSO_GROUP"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_argocd_capability_invalid_identity_type" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-identity-type"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      argocd = {
+        type = "ARGOCD"
+        argocd = {
+          idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+          rbac_role_mappings = [
+            {
+              role = "ADMIN"
+              identities = [
+                {
+                  id   = "12345678-1234-1234-1234-123456789012"
+                  type = "IAM_ROLE"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_capability_with_config_map_authentication" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-capability-auth"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    access_config = {
+      authentication_mode = "CONFIG_MAP"
+    }
+
+    capabilities = {
+      ack = {
+        type = "ACK"
+      }
+    }
+  }
+
+  expect_failures = [
+    aws_eks_capability.this
+  ]
+}
