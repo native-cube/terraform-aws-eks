@@ -22,7 +22,7 @@ module "eks" {
   subnet_ids         = var.subnet_ids
 
   endpoint_private_access = true
-  endpoint_public_access  = var.endpoint_public_access
+  endpoint_public_access  = true
   public_access_cidrs     = var.public_access_cidrs
 
   access_config = {
@@ -35,7 +35,7 @@ module "eks" {
       capacity_type          = "ON_DEMAND"
       desired_size           = 2
       disk_size              = 50
-      instance_types         = var.system_node_instance_types
+      instance_types         = var.node_instance_types
       labels                 = { workload = "system" }
       max_size               = 3
       min_size               = 1
@@ -44,25 +44,43 @@ module "eks" {
   }
 
   addons = {
-    coredns                = {}
-    kube-proxy             = {}
-    vpc-cni                = {}
-    eks-pod-identity-agent = {}
+    coredns    = {}
+    kube-proxy = {}
+    vpc-cni    = {}
   }
 
-  karpenter = {
-    enabled                    = true
-    create_access_entry        = true
-    create_node_iam_role       = true
-    subnet_ids                 = length(var.karpenter_subnet_ids) > 0 ? var.karpenter_subnet_ids : var.subnet_ids
-    tag_cluster_security_group = true
-    tag_subnets                = var.tag_karpenter_subnets
+  argocd = {
+    enabled          = true
+    capability_name  = "argocd"
+    namespace        = "argocd"
+    idc_instance_arn = var.identity_center_instance_arn
+    idc_region       = var.identity_center_region
+
+    create_iam_role = true
+    iam_policy_arns = var.argocd_capability_iam_policy_arns
+
+    network_access_vpce_ids = var.argocd_private_vpce_ids
+    rbac_role_mappings      = local.argocd_rbac_role_mappings
   }
 
   tags = merge(
     var.tags,
     {
-      Example = "karpenter-ready"
+      Example = "argocd-capability"
     }
   )
+}
+
+locals {
+  argocd_rbac_role_mappings = var.argocd_admin_group_id == null ? [] : [
+    {
+      role = "ADMIN"
+      identities = [
+        {
+          id   = var.argocd_admin_group_id
+          type = "SSO_GROUP"
+        }
+      ]
+    }
+  ]
 }

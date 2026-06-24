@@ -234,6 +234,85 @@ variable "addons" {
   }
 }
 
+variable "argocd" {
+  description = "Optional Amazon EKS Argo CD capability configuration. This creates the EKS managed Argo CD capability and, by default, a capability IAM role; it does not create Git repositories, Argo CD applications, or IAM Identity Center users/groups."
+  type = object({
+    capability_name           = optional(string, "argocd")
+    create_iam_role           = optional(bool, true)
+    delete_propagation_policy = optional(string, "RETAIN")
+    enabled                   = optional(bool, false)
+    iam_policy_arns           = optional(set(string), [])
+    iam_role_arn              = optional(string)
+    iam_role_name             = optional(string)
+    idc_instance_arn          = optional(string)
+    idc_region                = optional(string)
+    inline_policy_json        = optional(string)
+    namespace                 = optional(string)
+    network_access_vpce_ids   = optional(set(string), [])
+    rbac_role_mappings = optional(list(object({
+      role = string
+      identities = list(object({
+        id   = string
+        type = string
+      }))
+    })), [])
+  })
+  default = {}
+
+  validation {
+    condition = (
+      !var.argocd.enabled ||
+      var.argocd.create_iam_role ||
+      var.argocd.iam_role_arn != null
+    )
+    error_message = "When argocd.enabled is true and create_iam_role is false, argocd.iam_role_arn must be set."
+  }
+
+  validation {
+    condition = (
+      !var.argocd.enabled ||
+      var.argocd.idc_instance_arn != null
+    )
+    error_message = "When argocd.enabled is true, argocd.idc_instance_arn must be set."
+  }
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9-_]{0,99}$", var.argocd.capability_name))
+    error_message = "argocd.capability_name must start with a letter or number and contain only letters, numbers, hyphens, and underscores."
+  }
+
+  validation {
+    condition     = var.argocd.delete_propagation_policy == "RETAIN"
+    error_message = "argocd.delete_propagation_policy currently supports only RETAIN."
+  }
+
+  validation {
+    condition = (
+      var.argocd.iam_role_name == null ||
+      can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.argocd.iam_role_name))
+    )
+    error_message = "argocd.iam_role_name must be 1-64 characters and contain only IAM role name characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for mapping in var.argocd.rbac_role_mappings :
+      contains(["ADMIN", "EDITOR", "VIEWER"], mapping.role)
+    ])
+    error_message = "argocd.rbac_role_mappings role must be ADMIN, EDITOR, or VIEWER."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for mapping in var.argocd.rbac_role_mappings : [
+        for identity in mapping.identities :
+        contains(["SSO_USER", "SSO_GROUP"], identity.type)
+      ]
+    ]))
+    error_message = "argocd.rbac_role_mappings identity type must be SSO_USER or SSO_GROUP."
+  }
+}
+
 variable "karpenter" {
   description = "Optional EKS-side readiness settings for Karpenter. This module prepares AWS/EKS primitives only; install Karpenter, controller IAM, interruption handling, NodePools, and EC2NodeClasses separately."
   type = object({

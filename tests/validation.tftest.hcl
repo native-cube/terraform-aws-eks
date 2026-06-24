@@ -143,3 +143,156 @@ run "rejects_karpenter_access_entry_with_config_map_authentication" {
     aws_eks_access_entry.karpenter_node
   ]
 }
+
+run "rejects_argocd_external_role_without_arn" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-role"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    argocd = {
+      enabled          = true
+      create_iam_role  = false
+      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+    }
+  }
+
+  expect_failures = [
+    var.argocd
+  ]
+}
+
+run "rejects_argocd_without_identity_center_instance" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-idc"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    argocd = {
+      enabled = true
+    }
+  }
+
+  expect_failures = [
+    var.argocd
+  ]
+}
+
+run "rejects_argocd_unsupported_delete_policy" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-delete-policy"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    argocd = {
+      enabled                   = true
+      idc_instance_arn          = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+      delete_propagation_policy = "DELETE"
+    }
+  }
+
+  expect_failures = [
+    var.argocd
+  ]
+}
+
+run "rejects_argocd_invalid_rbac_role" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-rbac-role"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    argocd = {
+      enabled          = true
+      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+      rbac_role_mappings = [
+        {
+          role = "OWNER"
+          identities = [
+            {
+              id   = "12345678-1234-1234-1234-123456789012"
+              type = "SSO_GROUP"
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  expect_failures = [
+    var.argocd
+  ]
+}
+
+run "rejects_argocd_invalid_identity_type" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-identity-type"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    argocd = {
+      enabled          = true
+      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+      rbac_role_mappings = [
+        {
+          role = "ADMIN"
+          identities = [
+            {
+              id   = "12345678-1234-1234-1234-123456789012"
+              type = "IAM_ROLE"
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  expect_failures = [
+    var.argocd
+  ]
+}
+
+run "rejects_argocd_with_config_map_authentication" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-argocd-auth"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    access_config = {
+      authentication_mode = "CONFIG_MAP"
+    }
+
+    argocd = {
+      enabled          = true
+      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+    }
+  }
+
+  expect_failures = [
+    aws_eks_capability.argocd
+  ]
+}
