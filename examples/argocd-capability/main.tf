@@ -49,18 +49,22 @@ module "eks" {
     vpc-cni    = {}
   }
 
-  argocd = {
-    enabled          = true
-    capability_name  = "argocd"
-    namespace        = "argocd"
-    idc_instance_arn = var.identity_center_instance_arn
-    idc_region       = var.identity_center_region
+  capabilities = {
+    argocd = {
+      type            = "ARGOCD"
+      capability_name = "argocd"
 
-    create_iam_role = true
-    iam_policy_arns = var.argocd_capability_iam_policy_arns
+      create_iam_role = true
+      iam_policy_arns = var.argocd_capability_iam_policy_arns
 
-    network_access_vpce_ids = var.argocd_private_vpce_ids
-    rbac_role_mappings      = local.argocd_rbac_role_mappings
+      argocd = {
+        namespace               = "argocd"
+        idc_instance_arn        = var.identity_center_instance_arn
+        idc_region              = var.identity_center_region
+        network_access_vpce_ids = var.argocd_private_vpce_ids
+        rbac_role_mappings      = local.argocd_rbac_role_mappings
+      }
+    }
   }
 
   tags = merge(

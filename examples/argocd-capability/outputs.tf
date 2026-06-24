@@ -5,22 +5,22 @@ output "cluster_name" {
 
 output "argocd_server_url" {
   description = "Managed Argo CD server URL."
-  value       = module.eks.argocd_server_url
+  value       = try(module.eks.argocd_server_urls["argocd"], null)
 }
 
 output "argocd_capability_arn" {
   description = "Amazon EKS Argo CD capability ARN."
-  value       = module.eks.argocd_capability_arn
+  value       = try(module.eks.capability_arns["argocd"], null)
 }
 
 output "argocd_capability_iam_role_arn" {
   description = "IAM role ARN used by the Amazon EKS Argo CD capability."
-  value       = module.eks.argocd_capability_iam_role_arn
+  value       = try(module.eks.capability_iam_role_arns["argocd"], null)
 }
 
 output "argocd_idc_managed_application_arn" {
   description = "IAM Identity Center managed application ARN created for the Argo CD capability."
-  value       = module.eks.argocd_idc_managed_application_arn
+  value       = try(module.eks.argocd_idc_managed_application_arns["argocd"], null)
 }
 
 output "update_kubeconfig_command" {

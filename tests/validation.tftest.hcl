@@ -144,29 +144,75 @@ run "rejects_karpenter_access_entry_with_config_map_authentication" {
   ]
 }
 
-run "rejects_argocd_external_role_without_arn" {
+run "rejects_invalid_capability_type" {
   command = plan
 
   variables {
-    name = "unit-invalid-argocd-role"
+    name = "unit-invalid-capability-type"
     subnet_ids = [
       "subnet-0123456789abcdef0",
       "subnet-0fedcba9876543210"
     ]
 
-    argocd = {
-      enabled          = true
-      create_iam_role  = false
-      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+    capabilities = {
+      invalid = {
+        type = "FLUXCD"
+      }
     }
   }
 
   expect_failures = [
-    var.argocd
+    var.capabilities
   ]
 }
 
-run "rejects_argocd_without_identity_center_instance" {
+run "rejects_capability_external_role_without_arn" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-capability-role"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      ack = {
+        type            = "ACK"
+        create_iam_role = false
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_capability_unsupported_delete_policy" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-capability-delete-policy"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      ack = {
+        type                      = "ACK"
+        delete_propagation_policy = "DELETE"
+      }
+    }
+  }
+
+  expect_failures = [
+    var.capabilities
+  ]
+}
+
+run "rejects_argocd_capability_without_identity_center_instance" {
   command = plan
 
   variables {
@@ -176,39 +222,45 @@ run "rejects_argocd_without_identity_center_instance" {
       "subnet-0fedcba9876543210"
     ]
 
-    argocd = {
-      enabled = true
+    capabilities = {
+      argocd = {
+        type   = "ARGOCD"
+        argocd = {}
+      }
     }
   }
 
   expect_failures = [
-    var.argocd
+    var.capabilities
   ]
 }
 
-run "rejects_argocd_unsupported_delete_policy" {
+run "rejects_argocd_config_for_non_argocd_capability" {
   command = plan
 
   variables {
-    name = "unit-invalid-argocd-delete-policy"
+    name = "unit-invalid-non-argocd-config"
     subnet_ids = [
       "subnet-0123456789abcdef0",
       "subnet-0fedcba9876543210"
     ]
 
-    argocd = {
-      enabled                   = true
-      idc_instance_arn          = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
-      delete_propagation_policy = "DELETE"
+    capabilities = {
+      ack = {
+        type = "ACK"
+        argocd = {
+          idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+        }
+      }
     }
   }
 
   expect_failures = [
-    var.argocd
+    var.capabilities
   ]
 }
 
-run "rejects_argocd_invalid_rbac_role" {
+run "rejects_argocd_capability_invalid_rbac_role" {
   command = plan
 
   variables {
@@ -218,29 +270,33 @@ run "rejects_argocd_invalid_rbac_role" {
       "subnet-0fedcba9876543210"
     ]
 
-    argocd = {
-      enabled          = true
-      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
-      rbac_role_mappings = [
-        {
-          role = "OWNER"
-          identities = [
+    capabilities = {
+      argocd = {
+        type = "ARGOCD"
+        argocd = {
+          idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+          rbac_role_mappings = [
             {
-              id   = "12345678-1234-1234-1234-123456789012"
-              type = "SSO_GROUP"
+              role = "OWNER"
+              identities = [
+                {
+                  id   = "12345678-1234-1234-1234-123456789012"
+                  type = "SSO_GROUP"
+                }
+              ]
             }
           ]
         }
-      ]
+      }
     }
   }
 
   expect_failures = [
-    var.argocd
+    var.capabilities
   ]
 }
 
-run "rejects_argocd_invalid_identity_type" {
+run "rejects_argocd_capability_invalid_identity_type" {
   command = plan
 
   variables {
@@ -250,33 +306,38 @@ run "rejects_argocd_invalid_identity_type" {
       "subnet-0fedcba9876543210"
     ]
 
-    argocd = {
-      enabled          = true
-      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
-      rbac_role_mappings = [
-        {
-          role = "ADMIN"
-          identities = [
+    capabilities = {
+      argocd = {
+        type = "ARGOCD"
+        argocd = {
+          idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+          rbac_role_mappings = [
             {
-              id   = "12345678-1234-1234-1234-123456789012"
-              type = "IAM_ROLE"
+              role = "ADMIN"
+              identities = [
+                {
+                  id   = "12345678-1234-1234-1234-123456789012"
+                  type = "IAM_ROLE"
+                }
+              ]
             }
           ]
         }
-      ]
+      }
     }
+
   }
 
   expect_failures = [
-    var.argocd
+    var.capabilities
   ]
 }
 
-run "rejects_argocd_with_config_map_authentication" {
+run "rejects_capability_with_config_map_authentication" {
   command = plan
 
   variables {
-    name = "unit-invalid-argocd-auth"
+    name = "unit-invalid-capability-auth"
     subnet_ids = [
       "subnet-0123456789abcdef0",
       "subnet-0fedcba9876543210"
@@ -286,13 +347,14 @@ run "rejects_argocd_with_config_map_authentication" {
       authentication_mode = "CONFIG_MAP"
     }
 
-    argocd = {
-      enabled          = true
-      idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+    capabilities = {
+      ack = {
+        type = "ACK"
+      }
     }
   }
 
   expect_failures = [
-    aws_eks_capability.argocd
+    aws_eks_capability.this
   ]
 }

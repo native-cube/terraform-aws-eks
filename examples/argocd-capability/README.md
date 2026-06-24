@@ -17,21 +17,25 @@ module "eks" {
   name       = "example-argocd"
   subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
 
-  argocd = {
-    enabled          = true
-    idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
-    namespace        = "argocd"
-    rbac_role_mappings = [
-      {
-        role = "ADMIN"
-        identities = [
+  capabilities = {
+    argocd = {
+      type = "ARGOCD"
+      argocd = {
+        idc_instance_arn = "arn:aws:sso:::instance/ssoins-7223a1b234567890"
+        namespace        = "argocd"
+        rbac_role_mappings = [
           {
-            id   = "12345678-1234-1234-1234-123456789012"
-            type = "SSO_GROUP"
+            role = "ADMIN"
+            identities = [
+              {
+                id   = "12345678-1234-1234-1234-123456789012"
+                type = "SSO_GROUP"
+              }
+            ]
           }
         ]
       }
-    ]
+    }
   }
 }
 ```

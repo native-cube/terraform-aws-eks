@@ -83,45 +83,49 @@ resource "aws_eks_access_entry" "karpenter_node" {
   }
 }
 
-resource "aws_eks_capability" "argocd" {
-  count = local.argocd_enabled ? 1 : 0
+resource "aws_eks_capability" "this" {
+  for_each = local.eks_capability_configs
 
-  capability_name           = var.argocd.capability_name
+  capability_name           = each.value.capability_name
   cluster_name              = aws_eks_cluster.this.name
-  delete_propagation_policy = var.argocd.delete_propagation_policy
-  role_arn                  = local.argocd_iam_role_arn
+  delete_propagation_policy = each.value.delete_propagation_policy
+  role_arn                  = local.eks_capability_iam_role_arns[each.key]
   tags                      = local.common_tags
-  type                      = "ARGOCD"
+  type                      = each.value.type
 
-  configuration {
-    argo_cd {
-      namespace = var.argocd.namespace
+  dynamic "configuration" {
+    for_each = each.value.type == "ARGOCD" && each.value.argocd != null ? [each.value.argocd] : []
 
-      aws_idc {
-        idc_instance_arn = var.argocd.idc_instance_arn
-        idc_region       = var.argocd.idc_region
-      }
+    content {
+      argo_cd {
+        namespace = configuration.value.namespace
 
-      dynamic "network_access" {
-        for_each = length(var.argocd.network_access_vpce_ids) > 0 ? [var.argocd.network_access_vpce_ids] : []
-
-        content {
-          vpce_ids = network_access.value
+        aws_idc {
+          idc_instance_arn = configuration.value.idc_instance_arn
+          idc_region       = configuration.value.idc_region
         }
-      }
 
-      dynamic "rbac_role_mapping" {
-        for_each = var.argocd.rbac_role_mappings
+        dynamic "network_access" {
+          for_each = length(configuration.value.network_access_vpce_ids) > 0 ? [configuration.value.network_access_vpce_ids] : []
 
-        content {
-          role = rbac_role_mapping.value.role
+          content {
+            vpce_ids = network_access.value
+          }
+        }
 
-          dynamic "identity" {
-            for_each = rbac_role_mapping.value.identities
+        dynamic "rbac_role_mapping" {
+          for_each = configuration.value.rbac_role_mappings
 
-            content {
-              id   = identity.value.id
-              type = identity.value.type
+          content {
+            role = rbac_role_mapping.value.role
+
+            dynamic "identity" {
+              for_each = rbac_role_mapping.value.identities
+
+              content {
+                id   = identity.value.id
+                type = identity.value.type
+              }
             }
           }
         }
@@ -132,13 +136,13 @@ resource "aws_eks_capability" "argocd" {
   lifecycle {
     precondition {
       condition     = contains(["API", "API_AND_CONFIG_MAP"], local.cluster_access_config.authentication_mode)
-      error_message = "Argo CD capabilities require access_config.authentication_mode to be API or API_AND_CONFIG_MAP."
+      error_message = "EKS capabilities require access_config.authentication_mode to be API or API_AND_CONFIG_MAP."
     }
   }
 
   depends_on = [
-    aws_iam_role_policy.argocd_capability,
-    aws_iam_role_policy_attachment.argocd_capability
+    aws_iam_role_policy.eks_capability,
+    aws_iam_role_policy_attachment.eks_capability
   ]
 }
 

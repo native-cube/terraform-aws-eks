@@ -44,39 +44,45 @@ output "node_iam_role_arn" {
   value       = aws_iam_role.node.arn
 }
 
-output "argocd_capability_arn" {
-  description = "ARN of the Amazon EKS Argo CD capability when enabled."
-  value       = local.argocd_enabled ? try(aws_eks_capability.argocd[0].arn, null) : null
+output "capability_arns" {
+  description = "Amazon EKS capability ARNs by capability key."
+  value       = { for key, capability in aws_eks_capability.this : key => capability.arn }
 }
 
-output "argocd_capability_name" {
-  description = "Name of the Amazon EKS Argo CD capability when enabled."
-  value       = local.argocd_enabled ? aws_eks_capability.argocd[0].capability_name : null
+output "capability_names" {
+  description = "Amazon EKS capability names by capability key."
+  value       = { for key, capability in aws_eks_capability.this : key => capability.capability_name }
 }
 
-output "argocd_capability_version" {
-  description = "Version of the Amazon EKS Argo CD capability software when enabled."
-  value       = local.argocd_enabled ? try(aws_eks_capability.argocd[0].version, null) : null
+output "capability_versions" {
+  description = "Amazon EKS capability software versions by capability key."
+  value       = { for key, capability in aws_eks_capability.this : key => capability.version }
 }
 
-output "argocd_server_url" {
-  description = "Managed Argo CD server URL exposed by the Amazon EKS Argo CD capability when enabled."
-  value       = local.argocd_enabled ? try(aws_eks_capability.argocd[0].configuration[0].argo_cd[0].server_url, null) : null
+output "capability_iam_role_arns" {
+  description = "IAM role ARNs used by Amazon EKS capabilities by capability key."
+  value       = local.eks_capability_iam_role_arns
 }
 
-output "argocd_idc_managed_application_arn" {
-  description = "IAM Identity Center managed application ARN created for the Amazon EKS Argo CD capability when enabled."
-  value       = local.argocd_enabled ? try(aws_eks_capability.argocd[0].configuration[0].argo_cd[0].aws_idc[0].idc_managed_application_arn, null) : null
+output "capability_iam_role_names" {
+  description = "IAM role names used by Amazon EKS capabilities by capability key."
+  value       = local.eks_capability_iam_role_names
 }
 
-output "argocd_capability_iam_role_arn" {
-  description = "IAM role ARN used by the Amazon EKS Argo CD capability when enabled."
-  value       = local.argocd_enabled ? local.argocd_iam_role_arn : null
+output "argocd_server_urls" {
+  description = "Managed Argo CD server URLs by ARGOCD capability key."
+  value = {
+    for key, capability in aws_eks_capability.this : key => try(capability.configuration[0].argo_cd[0].server_url, null)
+    if local.eks_capability_configs[key].type == "ARGOCD"
+  }
 }
 
-output "argocd_capability_iam_role_name" {
-  description = "IAM role name used by the Amazon EKS Argo CD capability when enabled."
-  value       = local.argocd_enabled ? local.argocd_iam_role_name_out : null
+output "argocd_idc_managed_application_arns" {
+  description = "IAM Identity Center managed application ARNs by ARGOCD capability key."
+  value = {
+    for key, capability in aws_eks_capability.this : key => try(capability.configuration[0].argo_cd[0].aws_idc[0].idc_managed_application_arn, null)
+    if local.eks_capability_configs[key].type == "ARGOCD"
+  }
 }
 
 output "karpenter_discovery_tag_key" {
