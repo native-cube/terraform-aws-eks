@@ -99,6 +99,174 @@ run "rejects_unsupported_cluster_encryption_resource" {
   ]
 }
 
+run "rejects_invalid_control_plane_scaling_tier" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-control-plane-scaling-tier"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    control_plane_scaling_config = {
+      tier = "tier-medium"
+    }
+  }
+
+  expect_failures = [
+    var.control_plane_scaling_config
+  ]
+}
+
+run "rejects_invalid_kube_api_server_event_ttl" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-api-server-event-ttl"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    kube_api_server_config = {
+      event_ttl = "5m"
+    }
+  }
+
+  expect_failures = [
+    var.kube_api_server_config
+  ]
+}
+
+run "rejects_invalid_kube_api_server_node_port_range" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-api-server-node-port-range"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    kube_api_server_config = {
+      service_node_port_range = {
+        min_port = 32000
+        max_port = 30000
+      }
+    }
+  }
+
+  expect_failures = [
+    var.kube_api_server_config
+  ]
+}
+
+run "rejects_invalid_hpa_sync_period" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-hpa-sync-period"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    control_plane_scaling_config = {
+      tier = "tier-xl"
+    }
+
+    kube_controller_manager_config = {
+      horizontal_pod_autoscaler_controller_config = {
+        horizontal_pod_autoscaler_sync_period = "20s"
+      }
+    }
+  }
+
+  expect_failures = [
+    var.kube_controller_manager_config
+  ]
+}
+
+run "rejects_hpa_config_on_standard_control_plane" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-hpa-standard-control-plane"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    control_plane_scaling_config = {
+      tier = "standard"
+    }
+
+    kube_controller_manager_config = {
+      horizontal_pod_autoscaler_controller_config = {
+        horizontal_pod_autoscaler_sync_period = "10s"
+      }
+    }
+  }
+
+  expect_failures = [
+    aws_eks_cluster.this
+  ]
+}
+
+run "rejects_invalid_scheduler_scoring_strategy" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-scheduler-strategy"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    kube_scheduler_config = {
+      node_resources_fit = {
+        scoring_strategy = {
+          type = "BalancedAllocation"
+        }
+      }
+    }
+  }
+
+  expect_failures = [
+    var.kube_scheduler_config
+  ]
+}
+
+run "rejects_invalid_scheduler_resource_weight" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-scheduler-weight"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    kube_scheduler_config = {
+      node_resources_fit = {
+        scoring_strategy = {
+          resources = [
+            {
+              name   = "cpu"
+              weight = 101
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  expect_failures = [
+    var.kube_scheduler_config
+  ]
+}
+
 run "rejects_karpenter_external_role_without_arn" {
   command = plan
 

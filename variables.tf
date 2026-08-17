@@ -83,6 +83,128 @@ variable "deletion_protection" {
   default     = null
 }
 
+variable "control_plane_scaling_config" {
+  description = "Optional EKS Provisioned Control Plane scaling configuration. Leave null to use the standard control plane scaling tier."
+  type = object({
+    tier = string
+  })
+  default = null
+
+  validation {
+    condition = (
+      var.control_plane_scaling_config == null ||
+      contains(["standard", "tier-xl", "tier-2xl", "tier-4xl", "tier-8xl"], var.control_plane_scaling_config.tier)
+    )
+    error_message = "control_plane_scaling_config.tier must be standard, tier-xl, tier-2xl, tier-4xl, or tier-8xl."
+  }
+}
+
+variable "kube_api_server_config" {
+  description = "Optional Kubernetes API server configuration for event retention and the NodePort service range."
+  type = object({
+    event_ttl = optional(string)
+    service_node_port_range = optional(object({
+      max_port = optional(number)
+      min_port = optional(number)
+    }))
+  })
+  default = null
+
+  validation {
+    condition = try(
+      var.kube_api_server_config.event_ttl == null ? true :
+      can(regex("^(1h|[1-5][0-9]m|60m)$", var.kube_api_server_config.event_ttl)),
+      true
+    )
+    error_message = "kube_api_server_config.event_ttl must be a single-unit duration from 10m to 60m; 1h is also accepted."
+  }
+
+  validation {
+    condition = try(
+      var.kube_api_server_config.service_node_port_range == null ? true : alltrue([
+        var.kube_api_server_config.service_node_port_range.min_port == null ? true : (
+          floor(var.kube_api_server_config.service_node_port_range.min_port) == var.kube_api_server_config.service_node_port_range.min_port &&
+          var.kube_api_server_config.service_node_port_range.min_port >= 10260 &&
+          var.kube_api_server_config.service_node_port_range.min_port <= 32767
+        ),
+        var.kube_api_server_config.service_node_port_range.max_port == null ? true : (
+          floor(var.kube_api_server_config.service_node_port_range.max_port) == var.kube_api_server_config.service_node_port_range.max_port &&
+          var.kube_api_server_config.service_node_port_range.max_port >= 10260 &&
+          var.kube_api_server_config.service_node_port_range.max_port <= 32767
+        ),
+        coalesce(var.kube_api_server_config.service_node_port_range.min_port, 30000) <= coalesce(var.kube_api_server_config.service_node_port_range.max_port, 32767)
+      ]),
+      true
+    )
+    error_message = "kube_api_server_config.service_node_port_range ports must be integers from 10260 to 32767, and max_port must be greater than or equal to min_port."
+  }
+}
+
+variable "kube_controller_manager_config" {
+  description = "Optional Kubernetes controller manager configuration. HPA controller customization requires a Provisioned Control Plane tier."
+  type = object({
+    horizontal_pod_autoscaler_controller_config = optional(object({
+      horizontal_pod_autoscaler_sync_period = optional(string)
+    }))
+  })
+  default = null
+
+  validation {
+    condition = try(
+      var.kube_controller_manager_config.horizontal_pod_autoscaler_controller_config == null ? true :
+      var.kube_controller_manager_config.horizontal_pod_autoscaler_controller_config.horizontal_pod_autoscaler_sync_period == null ? true :
+      can(regex("^1[0-5]s$", var.kube_controller_manager_config.horizontal_pod_autoscaler_controller_config.horizontal_pod_autoscaler_sync_period)),
+      true
+    )
+    error_message = "kube_controller_manager_config.horizontal_pod_autoscaler_controller_config.horizontal_pod_autoscaler_sync_period must be a single-unit duration from 10s to 15s."
+  }
+}
+
+variable "kube_scheduler_config" {
+  description = "Optional Kubernetes scheduler configuration for the NodeResourcesFit scoring strategy."
+  type = object({
+    node_resources_fit = optional(object({
+      scoring_strategy = optional(object({
+        resources = optional(list(object({
+          name   = optional(string)
+          weight = optional(number)
+        })), [])
+        type = optional(string)
+      }))
+    }))
+  })
+  default = null
+
+  validation {
+    condition = try(
+      var.kube_scheduler_config.node_resources_fit == null ? true :
+      var.kube_scheduler_config.node_resources_fit.scoring_strategy == null ? true :
+      var.kube_scheduler_config.node_resources_fit.scoring_strategy.type == null ? true :
+      contains(["LeastAllocated", "MostAllocated"], var.kube_scheduler_config.node_resources_fit.scoring_strategy.type),
+      true
+    )
+    error_message = "kube_scheduler_config.node_resources_fit.scoring_strategy.type must be LeastAllocated or MostAllocated."
+  }
+
+  validation {
+    condition = try(
+      var.kube_scheduler_config.node_resources_fit == null ? true :
+      var.kube_scheduler_config.node_resources_fit.scoring_strategy == null ? true :
+      alltrue([
+        for resource in var.kube_scheduler_config.node_resources_fit.scoring_strategy.resources :
+        (resource.name == null ? true : trimspace(resource.name) != "") &&
+        (resource.weight == null ? true : (
+          floor(resource.weight) == resource.weight &&
+          resource.weight >= 1 &&
+          resource.weight <= 100
+        ))
+      ]),
+      true
+    )
+    error_message = "kube_scheduler_config scoring resources must have non-empty names when set and integer weights from 1 to 100."
+  }
+}
+
 variable "cluster_encryption_config" {
   description = "Optional EKS encryption configuration for Kubernetes secrets using an existing KMS key."
   type = object({
