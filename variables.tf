@@ -83,6 +83,22 @@ variable "deletion_protection" {
   default     = null
 }
 
+variable "control_plane_scaling_config" {
+  description = "Optional EKS Provisioned Control Plane scaling configuration. Leave null to use the standard control plane scaling tier."
+  type = object({
+    tier = string
+  })
+  default = null
+
+  validation {
+    condition = (
+      var.control_plane_scaling_config == null ||
+      contains(["standard", "tier-xl", "tier-2xl", "tier-4xl", "tier-8xl"], var.control_plane_scaling_config.tier)
+    )
+    error_message = "control_plane_scaling_config.tier must be standard, tier-xl, tier-2xl, tier-4xl, or tier-8xl."
+  }
+}
+
 variable "cluster_encryption_config" {
   description = "Optional EKS encryption configuration for Kubernetes secrets using an existing KMS key."
   type = object({

@@ -5,6 +5,7 @@ Simple Terraform module for creating an Amazon EKS cluster with:
 - EKS control plane IAM role
 - Managed node group IAM role
 - One or more EKS managed node groups
+- Optional EKS Provisioned Control Plane scaling tiers
 - Core EKS add-ons: `coredns`, `kube-proxy`, and `vpc-cni`
 - Optional Amazon EKS managed capabilities: Argo CD, ACK, and KRO
 - Optional EKS-side Karpenter readiness without installing Karpenter itself
@@ -50,6 +51,26 @@ aws eks update-kubeconfig --name dev-eks
 - `examples/advanced` - restricted API access, full control-plane logging, multiple node groups, expanded add-on configuration, optional IAM-backed add-ons, and optional node subnet overrides.
 - `examples/capabilities` - Amazon EKS managed capabilities for Argo CD, ACK, and KRO, including IAM Identity Center authentication for Argo CD and optional capability role policies.
 - `examples/karpenter-ready` - EKS-side Karpenter readiness with discovery tags, a Karpenter node role, and node access entry while leaving the Karpenter controller, Helm release, interruption queue, NodePool, and EC2NodeClass to a separate module.
+- `examples/provisioned-control-plane` - EKS Provisioned Control Plane configuration with a selectable scaling tier for predictable control-plane capacity.
+
+## Provisioned Control Plane
+
+Set `control_plane_scaling_config` when a cluster needs predictable, pre-provisioned control-plane capacity:
+
+```hcl
+module "eks" {
+  source = "./eks"
+
+  name       = "performance-critical"
+  subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
+
+  control_plane_scaling_config = {
+    tier = "tier-xl"
+  }
+}
+```
+
+Supported tiers are `standard`, `tier-xl`, `tier-2xl`, `tier-4xl`, and `tier-8xl`. Leave the variable as `null` (the default) for standard control-plane behavior, or explicitly set `tier = "standard"` to move an existing Provisioned Control Plane cluster back to Standard mode. Provisioned tiers incur additional charges and remain pinned to the selected tier until reconfigured.
 
 ## EKS Capabilities
 
@@ -130,13 +151,13 @@ This module deliberately does not install the Karpenter controller, create its c
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.39.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 6.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 6.39.0 |
 
 ## Resources
 
@@ -172,6 +193,7 @@ This module deliberately does not install the Karpenter controller, create its c
 | <a name="input_cluster_encryption_config"></a> [cluster\_encryption\_config](#input\_cluster\_encryption\_config) | Optional EKS encryption configuration for Kubernetes secrets using an existing KMS key. | <pre>object({<br/>    provider_key_arn = string<br/>    resources        = optional(list(string), ["secrets"])<br/>  })</pre> | `null` | no |
 | <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Optional EKS cluster name. When null, name is used as the cluster name. | `string` | `null` | no |
 | <a name="input_cluster_security_group_ids"></a> [cluster\_security\_group\_ids](#input\_cluster\_security\_group\_ids) | Additional security group IDs to associate with the EKS control plane. | `list(string)` | `[]` | no |
+| <a name="input_control_plane_scaling_config"></a> [control\_plane\_scaling\_config](#input\_control\_plane\_scaling\_config) | Optional EKS Provisioned Control Plane scaling configuration. Leave null to use the standard control plane scaling tier. | <pre>object({<br/>    tier = string<br/>  })</pre> | `null` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether to enable deletion protection for the EKS cluster. Leave null to use the AWS/provider default. | `bool` | `null` | no |
 | <a name="input_enabled_cluster_log_types"></a> [enabled\_cluster\_log\_types](#input\_enabled\_cluster\_log\_types) | EKS control plane log types to enable. | `list(string)` | <pre>[<br/>  "api",<br/>  "audit",<br/>  "authenticator"<br/>]</pre> | no |
 | <a name="input_endpoint_private_access"></a> [endpoint\_private\_access](#input\_endpoint\_private\_access) | Whether the Kubernetes API server endpoint is reachable from within the VPC. | `bool` | `true` | no |

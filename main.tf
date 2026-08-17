@@ -6,6 +6,14 @@ resource "aws_eks_cluster" "this" {
 
   enabled_cluster_log_types = var.enabled_cluster_log_types
 
+  dynamic "control_plane_scaling_config" {
+    for_each = var.control_plane_scaling_config == null ? [] : [var.control_plane_scaling_config]
+
+    content {
+      tier = control_plane_scaling_config.value.tier
+    }
+  }
+
   vpc_config {
     subnet_ids              = var.subnet_ids
     endpoint_private_access = var.endpoint_private_access

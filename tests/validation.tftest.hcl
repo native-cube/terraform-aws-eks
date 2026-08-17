@@ -99,6 +99,26 @@ run "rejects_unsupported_cluster_encryption_resource" {
   ]
 }
 
+run "rejects_invalid_control_plane_scaling_tier" {
+  command = plan
+
+  variables {
+    name = "unit-invalid-control-plane-scaling-tier"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    control_plane_scaling_config = {
+      tier = "tier-medium"
+    }
+  }
+
+  expect_failures = [
+    var.control_plane_scaling_config
+  ]
+}
+
 run "rejects_karpenter_external_role_without_arn" {
   command = plan
 
