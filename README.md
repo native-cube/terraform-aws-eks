@@ -55,7 +55,7 @@ aws eks update-kubeconfig --name dev-eks
 
 ## Provisioned Control Plane
 
-Set `control_plane_scaling_config` when a cluster needs predictable, pre-provisioned control-plane capacity:
+Set `control_plane_scaling_config` when a cluster needs predictable, pre-provisioned control-plane capacity. The component configuration arguments can customize the API server, controller manager, and scheduler:
 
 ```hcl
 module "eks" {
@@ -67,10 +67,38 @@ module "eks" {
   control_plane_scaling_config = {
     tier = "tier-xl"
   }
+
+  kube_api_server_config = {
+    event_ttl = "30m"
+    service_node_port_range = {
+      min_port = 30000
+      max_port = 32767
+    }
+  }
+
+  kube_controller_manager_config = {
+    horizontal_pod_autoscaler_controller_config = {
+      horizontal_pod_autoscaler_sync_period = "10s"
+    }
+  }
+
+  kube_scheduler_config = {
+    node_resources_fit = {
+      scoring_strategy = {
+        type = "MostAllocated"
+        resources = [
+          { name = "cpu", weight = 1 },
+          { name = "memory", weight = 1 }
+        ]
+      }
+    }
+  }
 }
 ```
 
 Supported tiers are `standard`, `tier-xl`, `tier-2xl`, `tier-4xl`, and `tier-8xl`. Leave the variable as `null` (the default) for standard control-plane behavior, or explicitly set `tier = "standard"` to move an existing Provisioned Control Plane cluster back to Standard mode. Provisioned tiers incur additional charges and remain pinned to the selected tier until reconfigured.
+
+`kube_api_server_config.event_ttl` accepts 10–60 minutes, and the NodePort range must stay between ports 10260 and 32767. The controller manager HPA sync period accepts 10–15 seconds and requires a Provisioned Control Plane tier. Scheduler scoring supports `LeastAllocated` and `MostAllocated`, with optional resource weights from 1 to 100.
 
 ## EKS Capabilities
 
@@ -151,13 +179,13 @@ This module deliberately does not install the Karpenter controller, create its c
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.39.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.59.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 6.39.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 6.59.0 |
 
 ## Resources
 
@@ -199,6 +227,9 @@ This module deliberately does not install the Karpenter controller, create its c
 | <a name="input_endpoint_private_access"></a> [endpoint\_private\_access](#input\_endpoint\_private\_access) | Whether the Kubernetes API server endpoint is reachable from within the VPC. | `bool` | `true` | no |
 | <a name="input_endpoint_public_access"></a> [endpoint\_public\_access](#input\_endpoint\_public\_access) | Whether the Kubernetes API server endpoint is reachable from the public internet. | `bool` | `true` | no |
 | <a name="input_karpenter"></a> [karpenter](#input\_karpenter) | Optional EKS-side readiness settings for Karpenter. This module prepares AWS/EKS primitives only; install Karpenter, controller IAM, interruption handling, NodePools, and EC2NodeClasses separately. | <pre>object({<br/>    create_access_entry        = optional(bool, true)<br/>    create_node_iam_role       = optional(bool, true)<br/>    enabled                    = optional(bool, false)<br/>    node_iam_role_arn          = optional(string)<br/>    node_iam_role_name         = optional(string)<br/>    subnet_ids                 = optional(list(string), [])<br/>    tag_cluster_security_group = optional(bool, true)<br/>    tag_subnets                = optional(bool, true)<br/>  })</pre> | `{}` | no |
+| <a name="input_kube_api_server_config"></a> [kube\_api\_server\_config](#input\_kube\_api\_server\_config) | Optional Kubernetes API server configuration for event retention and the NodePort service range. | <pre>object({<br/>    event_ttl = optional(string)<br/>    service_node_port_range = optional(object({<br/>      max_port = optional(number)<br/>      min_port = optional(number)<br/>    }))<br/>  })</pre> | `null` | no |
+| <a name="input_kube_controller_manager_config"></a> [kube\_controller\_manager\_config](#input\_kube\_controller\_manager\_config) | Optional Kubernetes controller manager configuration. HPA controller customization requires a Provisioned Control Plane tier. | <pre>object({<br/>    horizontal_pod_autoscaler_controller_config = optional(object({<br/>      horizontal_pod_autoscaler_sync_period = optional(string)<br/>    }))<br/>  })</pre> | `null` | no |
+| <a name="input_kube_scheduler_config"></a> [kube\_scheduler\_config](#input\_kube\_scheduler\_config) | Optional Kubernetes scheduler configuration for the NodeResourcesFit scoring strategy. | <pre>object({<br/>    node_resources_fit = optional(object({<br/>      scoring_strategy = optional(object({<br/>        resources = optional(list(object({<br/>          name   = optional(string)<br/>          weight = optional(number)<br/>        })), [])<br/>        type = optional(string)<br/>      }))<br/>    }))<br/>  })</pre> | `null` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version for the EKS cluster and managed node groups. Leave null to use the current AWS default. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name prefix for module-created resources. Used as the EKS cluster name when cluster\_name is null. | `string` | n/a | yes |
 | <a name="input_node_groups"></a> [node\_groups](#input\_node\_groups) | Managed node groups to create. | <pre>map(object({<br/>    ami_type               = optional(string)<br/>    capacity_type          = optional(string, "ON_DEMAND")<br/>    desired_size           = optional(number, 2)<br/>    disk_size              = optional(number, 20)<br/>    instance_types         = optional(list(string), ["t3.medium"])<br/>    labels                 = optional(map(string), {})<br/>    max_size               = optional(number, 3)<br/>    min_size               = optional(number, 1)<br/>    subnet_ids             = optional(list(string), [])<br/>    update_max_unavailable = optional(number, 1)<br/>    node_repair_config = optional(object({<br/>      enabled                                 = optional(bool)<br/>      max_parallel_nodes_repaired_count       = optional(number)<br/>      max_parallel_nodes_repaired_percentage  = optional(number)<br/>      max_unhealthy_node_threshold_count      = optional(number)<br/>      max_unhealthy_node_threshold_percentage = optional(number)<br/>      overrides = optional(list(object({<br/>        min_repair_wait_time_mins = number<br/>        node_monitoring_condition = string<br/>        node_unhealthy_reason     = string<br/>        repair_action             = string<br/>      })), [])<br/>    }))<br/>    taints = optional(list(object({<br/>      effect = string<br/>      key    = string<br/>      value  = optional(string, "")<br/>    })), [])<br/>  }))</pre> | <pre>{<br/>  "default": {}<br/>}</pre> | no |
