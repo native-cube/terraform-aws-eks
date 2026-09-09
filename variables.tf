@@ -83,6 +83,18 @@ variable "deletion_protection" {
   default     = null
 }
 
+variable "bootstrap_self_managed_addons" {
+  description = "Whether EKS bootstraps self-managed networking add-ons at cluster creation. Leave null to derive true for standard clusters and false while Auto Mode is configured. This setting is create-only."
+  type        = bool
+  default     = null
+}
+
+variable "force_update_version" {
+  description = "Whether to force a Kubernetes version update when EKS cannot drain pods."
+  type        = bool
+  default     = null
+}
+
 variable "control_plane_scaling_config" {
   description = "Optional EKS Provisioned Control Plane scaling configuration. Leave null to use the standard control plane scaling tier."
   type = object({
@@ -259,10 +271,96 @@ variable "cloudwatch_log_group_kms_key_id" {
   default     = null
 }
 
+variable "auto_mode" {
+  description = "Optional EKS Auto Mode configuration. Null leaves Auto Mode unmanaged for backward compatibility; an empty object enables Auto Mode with its default node pools. Set enabled to false to explicitly disable previously managed Auto Mode capabilities."
+  type = object({
+    cluster_iam_policy_arn_map = optional(map(string), {})
+    cluster_iam_policy_arns    = optional(set(string), [])
+    create_access_entry        = optional(bool)
+    create_node_iam_role       = optional(bool, true)
+    enabled                    = optional(bool, true)
+    node_iam_policy_arn_map    = optional(map(string), {})
+    node_iam_policy_arns       = optional(set(string), [])
+    node_iam_role_arn          = optional(string)
+    node_iam_role_name         = optional(string)
+    node_pools                 = optional(set(string), ["general-purpose", "system"])
+  })
+  default = null
+
+  validation {
+    condition = var.auto_mode == null ? true : (
+      !var.auto_mode.enabled ||
+      length(var.auto_mode.node_pools) == 0 ||
+      var.auto_mode.create_node_iam_role ||
+      var.auto_mode.node_iam_role_arn != null
+    )
+    error_message = "When Auto Mode built-in node pools are enabled and create_node_iam_role is false, auto_mode.node_iam_role_arn must be set."
+  }
+
+  validation {
+    condition = var.auto_mode == null ? true : (
+      var.auto_mode.create_access_entry != true || (
+        var.auto_mode.enabled &&
+        length(var.auto_mode.node_pools) == 0 &&
+        (var.auto_mode.create_node_iam_role || var.auto_mode.node_iam_role_arn != null)
+      )
+    )
+    error_message = "auto_mode.create_access_entry=true requires enabled Auto Mode without built-in node pools and a module-created or external node IAM role."
+  }
+
+  validation {
+    condition = var.auto_mode == null ? true : (
+      alltrue([
+        for node_pool in var.auto_mode.node_pools :
+        contains(["general-purpose", "system"], node_pool)
+      ])
+    )
+    error_message = "auto_mode.node_pools supports only general-purpose and system."
+  }
+
+  validation {
+    condition = var.auto_mode == null ? true : (
+      var.auto_mode.node_iam_role_name == null ||
+      can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.auto_mode.node_iam_role_name))
+    )
+    error_message = "auto_mode.node_iam_role_name must be 1-64 characters and contain only IAM role name characters."
+  }
+
+  validation {
+    condition = var.auto_mode == null ? true : alltrue([
+      for key in concat(keys(var.auto_mode.cluster_iam_policy_arn_map), keys(var.auto_mode.node_iam_policy_arn_map)) :
+      can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", key))
+    ])
+    error_message = "auto_mode IAM policy map keys must be stable identifiers containing only letters, numbers, periods, underscores, and hyphens."
+  }
+}
+
+variable "ip_family" {
+  description = "Optional Kubernetes service IP family. Valid values are ipv4 or ipv6."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.ip_family == null || contains(["ipv4", "ipv6"], var.ip_family)
+    error_message = "ip_family must be ipv4 or ipv6."
+  }
+}
+
 variable "service_ipv4_cidr" {
   description = "Optional Kubernetes service IPv4 CIDR. Set only when you need a non-default service CIDR."
   type        = string
   default     = null
+}
+
+variable "upgrade_policy_support_type" {
+  description = "Optional Kubernetes version support policy. Valid values are STANDARD and EXTENDED."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.upgrade_policy_support_type == null || contains(["STANDARD", "EXTENDED"], var.upgrade_policy_support_type)
+    error_message = "upgrade_policy_support_type must be STANDARD or EXTENDED."
+  }
 }
 
 variable "node_groups" {
@@ -337,8 +435,9 @@ variable "node_groups" {
 }
 
 variable "addons" {
-  description = "EKS add-ons to install after the managed node groups are created."
+  description = "EKS add-ons to install. Set before_compute for add-ons such as vpc-cni that managed nodes need during bootstrap."
   type = map(object({
+    before_compute       = optional(bool, false)
     configuration_values = optional(string)
     pod_identity_associations = optional(list(object({
       role_arn        = string
@@ -356,13 +455,322 @@ variable "addons" {
   }
 }
 
+variable "access_entries" {
+  description = "Additional EKS access entries and optional access policy associations to create."
+  type = map(object({
+    kubernetes_groups = optional(set(string), [])
+    policy_associations = optional(map(object({
+      access_scope = object({
+        namespaces = optional(set(string), [])
+        type       = string
+      })
+      policy_arn = string
+    })), {})
+    principal_arn = string
+    type          = optional(string, "STANDARD")
+    user_name     = optional(string)
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for _, entry in var.access_entries :
+      contains(["STANDARD", "EC2", "EC2_LINUX", "EC2_WINDOWS", "FARGATE_LINUX", "HYBRID_LINUX"], entry.type)
+    ])
+    error_message = "access_entries[*].type must be STANDARD, EC2, EC2_LINUX, EC2_WINDOWS, FARGATE_LINUX, or HYBRID_LINUX."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for _, entry in var.access_entries : [
+        for _, association in entry.policy_associations :
+        contains(["cluster", "namespace"], association.access_scope.type)
+      ]
+    ]))
+    error_message = "access_entries[*].policy_associations[*].access_scope.type must be cluster or namespace."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for _, entry in var.access_entries : [
+        for _, association in entry.policy_associations :
+        association.access_scope.type == "namespace" || length(association.access_scope.namespaces) == 0
+      ]
+    ]))
+    error_message = "access_entries[*].policy_associations[*].access_scope.namespaces must be empty when access_scope.type is cluster."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for _, entry in var.access_entries : [
+        for _, association in entry.policy_associations :
+        association.access_scope.type != "namespace" || length(association.access_scope.namespaces) > 0
+      ]
+    ]))
+    error_message = "access_entries[*].policy_associations[*].access_scope.namespaces must contain at least one namespace when access_scope.type is namespace."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, entry in var.access_entries :
+      entry.type == "STANDARD" ||
+      length(entry.policy_associations) == 0 ||
+      (
+        entry.type == "EC2" &&
+        alltrue([
+          for _, association in entry.policy_associations :
+          can(regex(":eks::aws:cluster-access-policy/AmazonEKSAutoNodePolicy$", association.policy_arn)) &&
+          association.access_scope.type == "cluster"
+        ])
+      )
+    ])
+    error_message = "Only STANDARD access entries may define arbitrary policy associations. EC2 entries may associate only AmazonEKSAutoNodePolicy at cluster scope."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, entry in var.access_entries :
+      entry.type == "STANDARD" || (length(entry.kubernetes_groups) == 0 && entry.user_name == null)
+    ])
+    error_message = "Only STANDARD access entries may define kubernetes_groups or user_name."
+  }
+
+  validation {
+    condition     = length(distinct([for _, entry in var.access_entries : entry.principal_arn])) == length(var.access_entries)
+    error_message = "access_entries must not contain duplicate principal ARNs."
+  }
+}
+
+variable "auto_mode_node_classes" {
+  description = "Custom EKS Auto Mode NodeClass manifests to render as YAML, keyed by Kubernetes metadata.name. The module does not apply these manifests."
+  type = map(object({
+    access_entry_key    = optional(string)
+    annotations         = optional(map(string), {})
+    create_access_entry = optional(bool)
+    labels              = optional(map(string), {})
+    node_role_arn       = optional(string)
+    spec                = any
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for name, _ in var.auto_mode_node_classes :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", name)) && length(name) <= 63 && name != "default"
+    ])
+    error_message = "auto_mode_node_classes keys must be DNS label names up to 63 characters and must not be default."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, node_class in var.auto_mode_node_classes :
+      !(try(node_class.spec.role, null) != null && try(node_class.spec.instanceProfile, null) != null)
+    ])
+    error_message = "auto_mode_node_classes[*].spec must not set both role and instanceProfile."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, node_class in var.auto_mode_node_classes :
+      node_class.create_access_entry == false || (
+        try(node_class.spec.role, null) == null &&
+        try(node_class.spec.instanceProfile, null) == null
+      ) || node_class.node_role_arn != null
+    ])
+    error_message = "A NodeClass with a custom spec.role or spec.instanceProfile must set node_role_arn unless create_access_entry=false."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, node_class in var.auto_mode_node_classes :
+      node_class.create_access_entry != true || node_class.node_role_arn != null
+    ])
+    error_message = "auto_mode_node_classes[*].create_access_entry=true requires node_role_arn."
+  }
+
+  validation {
+    condition = alltrue([
+      for name, node_class in var.auto_mode_node_classes :
+      node_class.access_entry_key == null || (
+        can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", node_class.access_entry_key)) &&
+        node_class.node_role_arn != null &&
+        node_class.create_access_entry != false
+      )
+    ])
+    error_message = "auto_mode_node_classes[*].access_entry_key must be a stable identifier and requires an enabled access entry with node_role_arn."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, node_class in var.auto_mode_node_classes :
+      node_class.node_role_arn == null ||
+      try(node_class.spec.role, null) == null ||
+      reverse(split("/", node_class.node_role_arn))[0] == node_class.spec.role
+    ])
+    error_message = "auto_mode_node_classes[*].spec.role must match the role name in node_role_arn when both are set."
+  }
+}
+
+variable "auto_mode_node_pools" {
+  description = "Custom EKS Auto Mode NodePool manifests to render as YAML, keyed by Kubernetes metadata.name. The module does not apply these manifests."
+  type = map(object({
+    annotations = optional(map(string), {})
+    labels      = optional(map(string), {})
+    spec        = any
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for name, _ in var.auto_mode_node_pools :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", name)) && length(name) <= 63
+    ])
+    error_message = "auto_mode_node_pools keys must be DNS label names up to 63 characters."
+  }
+}
+
+variable "auto_mode_storage_classes" {
+  description = "EKS Auto Mode EBS StorageClass manifests to render as YAML, keyed by Kubernetes metadata.name."
+  type = map(object({
+    allow_volume_expansion = optional(bool, true)
+    allowed_topologies     = optional(list(any), [])
+    annotations            = optional(map(string), {})
+    labels                 = optional(map(string), {})
+    mount_options          = optional(list(string), [])
+    parameters             = optional(map(string), {})
+    reclaim_policy         = optional(string, "Delete")
+    volume_binding_mode    = optional(string, "WaitForFirstConsumer")
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for name, _ in var.auto_mode_storage_classes :
+      can(regex("^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$", name)) && length(name) <= 253
+    ])
+    error_message = "auto_mode_storage_classes keys must be valid Kubernetes storage class names up to 253 characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, storage_class in var.auto_mode_storage_classes :
+      contains(["Delete", "Retain"], storage_class.reclaim_policy)
+    ])
+    error_message = "auto_mode_storage_classes[*].reclaim_policy must be Delete or Retain."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, storage_class in var.auto_mode_storage_classes :
+      contains(["Immediate", "WaitForFirstConsumer"], storage_class.volume_binding_mode)
+    ])
+    error_message = "auto_mode_storage_classes[*].volume_binding_mode must be Immediate or WaitForFirstConsumer."
+  }
+}
+
+variable "auto_mode_load_balancer_services" {
+  description = "EKS Auto Mode Network Load Balancer Service manifests to render as YAML, keyed by Kubernetes metadata.name."
+  type = map(object({
+    annotations                 = optional(map(string), {})
+    external_traffic_policy     = optional(string)
+    ip_families                 = optional(list(string), [])
+    ip_family_policy            = optional(string)
+    labels                      = optional(map(string), {})
+    load_balancer_class         = optional(string, "eks.amazonaws.com/nlb")
+    load_balancer_source_ranges = optional(list(string), [])
+    namespace                   = optional(string, "default")
+    ports                       = list(any)
+    selector                    = map(string)
+    session_affinity            = optional(string)
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for name, _ in var.auto_mode_load_balancer_services :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", name)) && length(name) <= 63
+    ])
+    error_message = "auto_mode_load_balancer_services keys must be DNS label names up to 63 characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, service in var.auto_mode_load_balancer_services :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", service.namespace)) && length(service.namespace) <= 63
+    ])
+    error_message = "auto_mode_load_balancer_services[*].namespace must be a DNS label up to 63 characters."
+  }
+}
+
+variable "pod_identity_associations" {
+  description = "EKS Pod Identity associations to create for Kubernetes service accounts. The module can create the IAM role per association, or use an externally managed role ARN."
+  type = map(object({
+    create_iam_role      = optional(bool, true)
+    disable_session_tags = optional(bool)
+    iam_policy_arn_map   = optional(map(string), {})
+    iam_policy_arns      = optional(set(string), [])
+    iam_role_arn         = optional(string)
+    iam_role_name        = optional(string)
+    inline_policy_json   = optional(string)
+    namespace            = string
+    service_account      = string
+    tags                 = optional(map(string), {})
+    target_role_arn      = optional(string)
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for _, association in var.pod_identity_associations :
+      association.create_iam_role || association.iam_role_arn != null
+    ])
+    error_message = "When pod_identity_associations[*].create_iam_role is false, pod_identity_associations[*].iam_role_arn must be set."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, association in var.pod_identity_associations :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", association.namespace)) && length(association.namespace) <= 63
+    ])
+    error_message = "pod_identity_associations[*].namespace must be a DNS label up to 63 characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, association in var.pod_identity_associations :
+      can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", association.service_account)) && length(association.service_account) <= 63
+    ])
+    error_message = "pod_identity_associations[*].service_account must be a DNS label up to 63 characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for _, association in var.pod_identity_associations :
+      association.iam_role_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", association.iam_role_name))
+    ])
+    error_message = "pod_identity_associations[*].iam_role_name must be 1-64 characters and contain only IAM role name characters."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for _, association in var.pod_identity_associations : [
+        for key in keys(association.iam_policy_arn_map) :
+        can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", key))
+      ]
+    ]))
+    error_message = "pod_identity_associations[*].iam_policy_arn_map keys must be stable identifiers containing only letters, numbers, periods, underscores, and hyphens."
+  }
+}
+
 variable "capabilities" {
   description = "Amazon EKS managed capabilities to create, keyed by a stable local name. Supported types are ARGOCD, ACK, and KRO. The module can create a capability IAM role per entry, or use an externally managed role ARN."
   type = map(object({
     capability_name           = optional(string)
     create_iam_role           = optional(bool, true)
     delete_propagation_policy = optional(string, "RETAIN")
+    iam_policy_arn_map        = optional(map(string), {})
     iam_policy_arns           = optional(set(string), [])
+    iam_policy_presets        = optional(set(string), [])
     iam_role_arn              = optional(string)
     iam_role_name             = optional(string)
     inline_policy_json        = optional(string)
@@ -389,6 +797,21 @@ variable "capabilities" {
       contains(["ACK", "ARGOCD", "KRO"], upper(capability.type))
     ])
     error_message = "capabilities entries must use type ACK, ARGOCD, or KRO."
+  }
+
+  validation {
+    condition     = length(distinct([for _, capability in var.capabilities : upper(capability.type)])) == length(var.capabilities)
+    error_message = "Only one capability of each type may be configured per EKS cluster."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for _, capability in var.capabilities : [
+        for preset in capability.iam_policy_presets :
+        contains(["cloudcontrol_read_only", "eks_read_only", "resource_tagging", "secrets_read_only"], preset)
+      ]
+    ]))
+    error_message = "capabilities[*].iam_policy_presets supports cloudcontrol_read_only, eks_read_only, resource_tagging, and secrets_read_only."
   }
 
   validation {
@@ -421,6 +844,16 @@ variable "capabilities" {
       capability.iam_role_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", capability.iam_role_name))
     ])
     error_message = "capabilities[*].iam_role_name must be 1-64 characters and contain only IAM role name characters."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for _, capability in var.capabilities : [
+        for key in keys(capability.iam_policy_arn_map) :
+        can(regex("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", key))
+      ]
+    ]))
+    error_message = "capabilities[*].iam_policy_arn_map keys must be stable identifiers containing only letters, numbers, periods, underscores, and hyphens."
   }
 
   validation {
