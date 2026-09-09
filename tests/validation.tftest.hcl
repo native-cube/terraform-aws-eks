@@ -307,8 +307,16 @@ run "rejects_karpenter_access_entry_with_config_map_authentication" {
     }
   }
 
+  override_resource {
+    target          = aws_iam_role.node
+    override_during = plan
+    values = {
+      arn = "arn:aws:iam::123456789012:role/unit-invalid-karpenter-auth-managed-node-role"
+    }
+  }
+
   expect_failures = [
-    aws_eks_access_entry.karpenter_node
+    aws_eks_cluster.this
   ]
 }
 
@@ -523,6 +531,6 @@ run "rejects_capability_with_config_map_authentication" {
   }
 
   expect_failures = [
-    aws_eks_capability.this
+    aws_eks_cluster.this
   ]
 }

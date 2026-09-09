@@ -88,6 +88,9 @@ run "capabilities_cluster_shape" {
         iam_policy_arns = [
           "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
         ]
+        iam_policy_arn_map = {
+          read_only = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        }
       }
 
       ack = {
@@ -99,6 +102,30 @@ run "capabilities_cluster_shape" {
         create_iam_role = false
         iam_role_arn    = "arn:aws:iam::123456789012:role/platform/KROCapabilityRole-external"
       }
+    }
+  }
+
+  override_resource {
+    target          = aws_iam_role.node
+    override_during = plan
+    values = {
+      arn = "arn:aws:iam::123456789012:role/unit-capabilities-managed-node-role"
+    }
+  }
+
+  override_resource {
+    target          = aws_iam_role.eks_capability["argocd"]
+    override_during = plan
+    values = {
+      arn = "arn:aws:iam::123456789012:role/unit-capabilities-argocd-role"
+    }
+  }
+
+  override_resource {
+    target          = aws_iam_role.eks_capability["ack"]
+    override_during = plan
+    values = {
+      arn = "arn:aws:iam::123456789012:role/unit-capabilities-ack-role"
     }
   }
 
@@ -169,11 +196,85 @@ run "capabilities_cluster_shape" {
 
   assert {
     condition     = contains(keys(aws_iam_role_policy_attachment.eks_capability), "argocd:arn:aws:iam::aws:policy/SecretsManagerReadWrite")
-    error_message = "Configured capability managed policies should be attached to the created IAM role."
+    error_message = "Configured capability policy sets should remain supported."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy_attachment.eks_capability["argocd:key:read_only"].policy_arn == "arn:aws:iam::aws:policy/ReadOnlyAccess"
+    error_message = "Capability policy maps should create attachments with stable capability and policy keys."
   }
 
   assert {
     condition     = aws_eks_capability.this["kro"].role_arn == "arn:aws:iam::123456789012:role/platform/KROCapabilityRole-external"
     error_message = "External capability role mode should use the supplied IAM role ARN."
+  }
+
+  assert {
+    condition     = output.capability_iam_role_names["kro"] == "KROCapabilityRole-external"
+    error_message = "Capability outputs should derive an external role name from the final ARN path segment."
+  }
+}
+
+run "rejects_capability_role_reused_by_generic_access_entry" {
+  command = plan
+
+  variables {
+    name = "unit-capability-access-collision"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    access_entries = {
+      platform_admin = {
+        principal_arn = "arn:aws:iam::123456789012:role/shared-capability-access-role"
+      }
+    }
+
+    capabilities = {
+      ack = {
+        type            = "ACK"
+        create_iam_role = false
+        iam_role_arn    = "arn:aws:iam::123456789012:role/shared-capability-access-role"
+      }
+    }
+  }
+
+  expect_failures = [
+    aws_eks_cluster.this
+  ]
+}
+
+run "allows_capabilities_to_share_external_role" {
+  command = plan
+
+  variables {
+    name = "unit-capability-role-collision"
+    subnet_ids = [
+      "subnet-0123456789abcdef0",
+      "subnet-0fedcba9876543210"
+    ]
+
+    capabilities = {
+      ack = {
+        type            = "ACK"
+        create_iam_role = false
+        iam_role_arn    = "arn:aws:iam::123456789012:role/shared-capability-role"
+      }
+
+      kro = {
+        type            = "KRO"
+        create_iam_role = false
+        iam_role_arn    = "arn:aws:iam::123456789012:role/shared-capability-role"
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_eks_capability.this["ack"].role_arn == "arn:aws:iam::123456789012:role/shared-capability-role" &&
+      aws_eks_capability.this["kro"].role_arn == "arn:aws:iam::123456789012:role/shared-capability-role"
+    )
+    error_message = "EKS capabilities must be able to share an external capability role while EKS manages the shared access entry."
   }
 }

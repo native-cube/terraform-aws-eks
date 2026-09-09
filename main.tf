@@ -1,8 +1,10 @@
 resource "aws_eks_cluster" "this" {
-  name                = local.cluster_name
-  role_arn            = aws_iam_role.cluster.arn
-  version             = var.kubernetes_version
-  deletion_protection = var.deletion_protection
+  name                          = local.cluster_name
+  role_arn                      = aws_iam_role.cluster.arn
+  version                       = var.kubernetes_version
+  bootstrap_self_managed_addons = local.cluster_bootstrap_self_managed_addons
+  deletion_protection           = var.deletion_protection
+  force_update_version          = var.force_update_version
 
   enabled_cluster_log_types = var.enabled_cluster_log_types
 
@@ -91,6 +93,16 @@ resource "aws_eks_cluster" "this" {
     }
   }
 
+  dynamic "compute_config" {
+    for_each = local.auto_mode_configured ? [var.auto_mode] : []
+
+    content {
+      enabled       = local.auto_mode_enabled
+      node_pools    = local.auto_mode_enabled ? compute_config.value.node_pools : null
+      node_role_arn = local.auto_mode_builtin_node_pools ? local.auto_mode_node_iam_role_arn : null
+    }
+  }
+
   dynamic "encryption_config" {
     for_each = var.cluster_encryption_config == null ? [] : [var.cluster_encryption_config]
 
@@ -104,16 +116,47 @@ resource "aws_eks_cluster" "this" {
   }
 
   dynamic "kubernetes_network_config" {
-    for_each = var.service_ipv4_cidr == null ? [] : [var.service_ipv4_cidr]
+    for_each = local.auto_mode_configured || var.ip_family != null || var.service_ipv4_cidr != null ? [1] : []
 
     content {
-      service_ipv4_cidr = kubernetes_network_config.value
+      ip_family         = var.ip_family
+      service_ipv4_cidr = var.service_ipv4_cidr
+
+      dynamic "elastic_load_balancing" {
+        for_each = local.auto_mode_configured ? [local.auto_mode_enabled] : []
+
+        content {
+          enabled = elastic_load_balancing.value
+        }
+      }
+    }
+  }
+
+  dynamic "storage_config" {
+    for_each = local.auto_mode_configured ? [local.auto_mode_enabled] : []
+
+    content {
+      block_storage {
+        enabled = storage_config.value
+      }
+    }
+  }
+
+  dynamic "upgrade_policy" {
+    for_each = var.upgrade_policy_support_type == null ? [] : [var.upgrade_policy_support_type]
+
+    content {
+      support_type = upgrade_policy.value
     }
   }
 
   tags = local.common_tags
 
   lifecycle {
+    # This setting is create-only. Ignoring later changes permits in-place Auto
+    # Mode enablement for clusters originally created with bootstrap add-ons.
+    ignore_changes = [bootstrap_self_managed_addons]
+
     precondition {
       condition = (
         try(var.kube_controller_manager_config.horizontal_pod_autoscaler_controller_config, null) == null ||
@@ -121,11 +164,180 @@ resource "aws_eks_cluster" "this" {
       )
       error_message = "kube_controller_manager_config.horizontal_pod_autoscaler_controller_config requires control_plane_scaling_config.tier to be tier-xl, tier-2xl, tier-4xl, or tier-8xl."
     }
+
+    precondition {
+      condition = (
+        !local.api_authentication_required ||
+        contains(["API", "API_AND_CONFIG_MAP"], try(local.cluster_access_config.authentication_mode, ""))
+      )
+      error_message = "Auto Mode, EKS access entries, Karpenter access entries, and EKS capabilities require access_config.authentication_mode to be API or API_AND_CONFIG_MAP."
+    }
+
+    precondition {
+      condition = (
+        local.auto_mode_enabled ||
+        (
+          length(var.auto_mode_node_classes) == 0 &&
+          length(var.auto_mode_node_pools) == 0 &&
+          length(var.auto_mode_storage_classes) == 0 &&
+          length(var.auto_mode_load_balancer_services) == 0
+        )
+      )
+      error_message = "Auto Mode Kubernetes manifests require auto_mode.enabled to be true."
+    }
+
+    precondition {
+      condition = alltrue([
+        for _, node_class in var.auto_mode_node_classes :
+        try(node_class.spec.role, null) != null ||
+        try(node_class.spec.instanceProfile, null) != null ||
+        try(node_class.node_role_arn, null) != null ||
+        local.auto_mode_node_iam_role_arn != null
+      ])
+      error_message = "Each Auto Mode NodeClass must specify a role, instanceProfile, or node_role_arn unless auto_mode supplies a node IAM role."
+    }
+
+    precondition {
+      condition     = !var.endpoint_public_access || length(var.public_access_cidrs) > 0
+      error_message = "public_access_cidrs must contain at least one CIDR when endpoint_public_access is true."
+    }
+
+    precondition {
+      condition     = var.ip_family != "ipv6" || var.service_ipv4_cidr == null
+      error_message = "service_ipv4_cidr cannot be set when ip_family is ipv6."
+    }
+
+    precondition {
+      condition = (
+        local.cluster_bootstrap_self_managed_addons ||
+        length(var.node_groups) == 0 ||
+        !contains(keys(var.addons), "vpc-cni") ||
+        try(var.addons["vpc-cni"].before_compute, true)
+      )
+      error_message = "Clusters without bootstrapped self-managed add-ons must set addons[\"vpc-cni\"].before_compute to true when this module manages VPC CNI for managed node groups."
+    }
+
+    precondition {
+      condition     = !local.auto_mode_enabled || !local.cluster_bootstrap_self_managed_addons
+      error_message = "EKS Auto Mode requires bootstrap_self_managed_addons to be false."
+    }
+
+    precondition {
+      condition     = length(distinct(local.managed_access_entry_principal_arns)) == length(local.managed_access_entry_principal_arns)
+      error_message = "Each module- or service-managed EKS access entry must use a unique principal ARN. Reuse service-managed entries, or give NodeClasses sharing a custom role the same access_entry_key."
+    }
+
+    precondition {
+      condition = alltrue([
+        for _, configs in local.auto_mode_node_class_access_entry_groups :
+        length(distinct([for config in configs : config.principal_arn])) == 1
+      ])
+      error_message = "NodeClasses sharing an access_entry_key must use the same node_role_arn."
+    }
   }
 
   depends_on = [
     aws_cloudwatch_log_group.cluster,
+    aws_iam_role_policy_attachment.auto_mode_cluster_additional,
+    aws_iam_role_policy_attachment.auto_mode_node,
+    aws_iam_role_policy_attachment.auto_mode_node_additional,
     aws_iam_role_policy_attachment.cluster
+  ]
+}
+
+resource "aws_eks_access_entry" "this" {
+  for_each = var.access_entries
+
+  cluster_name      = aws_eks_cluster.this.name
+  kubernetes_groups = each.value.kubernetes_groups
+  principal_arn     = each.value.principal_arn
+  tags              = local.common_tags
+  type              = each.value.type
+  user_name         = each.value.user_name
+}
+
+resource "aws_eks_access_policy_association" "this" {
+  for_each = local.access_policy_associations
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = each.value.policy_arn
+  principal_arn = each.value.principal_arn
+
+  access_scope {
+    namespaces = each.value.access_scope.namespaces
+    type       = each.value.access_scope.type
+  }
+
+  depends_on = [aws_eks_access_entry.this]
+}
+
+resource "aws_eks_access_entry" "auto_mode_node" {
+  count = local.auto_mode_create_access_entry ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = local.auto_mode_node_iam_role_arn
+  tags          = local.common_tags
+  type          = "EC2"
+}
+
+resource "aws_eks_access_policy_association" "auto_mode_node" {
+  count = local.auto_mode_create_access_entry ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSAutoNodePolicy"
+  principal_arn = local.auto_mode_node_iam_role_arn
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.auto_mode_node]
+}
+
+resource "aws_eks_access_entry" "auto_mode_node_class" {
+  for_each = local.auto_mode_node_class_access_entries
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = each.value.principal_arn
+  tags          = local.common_tags
+  type          = "EC2"
+
+  lifecycle {
+    precondition {
+      condition     = each.value.principal_arn != null
+      error_message = "Custom Auto Mode NodeClass access entries require auto_mode_node_classes[*].node_role_arn."
+    }
+  }
+}
+
+resource "aws_eks_access_policy_association" "auto_mode_node_class" {
+  for_each = local.auto_mode_node_class_access_entries
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSAutoNodePolicy"
+  principal_arn = each.value.principal_arn
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.auto_mode_node_class]
+}
+
+resource "aws_eks_pod_identity_association" "this" {
+  for_each = local.pod_identity_association_configs
+
+  cluster_name         = aws_eks_cluster.this.name
+  disable_session_tags = each.value.disable_session_tags
+  namespace            = each.value.namespace
+  role_arn             = local.pod_identity_iam_role_arns[each.key]
+  service_account      = each.value.service_account
+  tags                 = merge(local.common_tags, each.value.tags)
+  target_role_arn      = each.value.target_role_arn
+
+  depends_on = [
+    aws_iam_role_policy.pod_identity,
+    aws_iam_role_policy_attachment.pod_identity
   ]
 }
 
@@ -220,6 +432,7 @@ resource "aws_eks_capability" "this" {
 
   depends_on = [
     aws_iam_role_policy.eks_capability,
+    aws_iam_role_policy.eks_capability_preset,
     aws_iam_role_policy_attachment.eks_capability
   ]
 }
@@ -290,12 +503,35 @@ resource "aws_eks_node_group" "this" {
   )
 
   depends_on = [
+    aws_eks_addon.before_compute,
     aws_iam_role_policy_attachment.node
   ]
 }
 
+resource "aws_eks_addon" "before_compute" {
+  for_each = local.addons_before_compute
+
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                  = each.key
+  addon_version               = each.value.version
+  configuration_values        = each.value.configuration_values
+  resolve_conflicts_on_create = each.value.resolve_conflicts_on_create
+  resolve_conflicts_on_update = each.value.resolve_conflicts_on_update
+  service_account_role_arn    = each.value.service_account_role_arn
+  tags                        = local.common_tags
+
+  dynamic "pod_identity_association" {
+    for_each = each.value.pod_identity_associations
+
+    content {
+      role_arn        = pod_identity_association.value.role_arn
+      service_account = pod_identity_association.value.service_account
+    }
+  }
+}
+
 resource "aws_eks_addon" "this" {
-  for_each = var.addons
+  for_each = local.addons_after_compute
 
   cluster_name                = aws_eks_cluster.this.name
   addon_name                  = each.key

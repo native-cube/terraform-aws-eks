@@ -68,6 +68,14 @@ run "karpenter_ready_cluster_shape" {
     }
   }
 
+  override_resource {
+    target          = aws_iam_role.node
+    override_during = plan
+    values = {
+      arn = "arn:aws:iam::123456789012:role/unit-karpenter-managed-node-role"
+    }
+  }
+
   assert {
     condition     = aws_eks_cluster.this.access_config[0].authentication_mode == "API"
     error_message = "Karpenter access entries should derive API authentication when access_config is omitted."
